@@ -2,6 +2,8 @@
 
 Quickly copy the current file path and line number to clipboard — no code, just the reference.
 
+![demo](demo.gif)
+
 ## Install
 bash ./install.sh (do not sudo)
 
