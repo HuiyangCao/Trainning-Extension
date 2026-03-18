@@ -8,4 +8,11 @@ PUBLISHER=$(node -p "require('./package.json').publisher")
 vsce package --no-dependencies
 code --uninstall-extension "${PUBLISHER}.copy-with-ref" 2>/dev/null || true
 code --install-extension "copy-with-ref-${VERSION}.vsix"
-echo "Done. Reload VS Code window to take effect."
+
+if command -v cursor &>/dev/null; then
+  cursor --uninstall-extension "${PUBLISHER}.copy-with-ref" 2>/dev/null || true
+  cursor --install-extension "copy-with-ref-${VERSION}.vsix"
+  echo "Done. Reload VS Code and Cursor windows to take effect."
+else
+  echo "Done. Reload VS Code window to take effect."
+fi
