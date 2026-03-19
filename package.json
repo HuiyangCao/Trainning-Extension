@@ -14,7 +14,7 @@
   },
   "categories": ["Other"],
   "keywords": ["copy", "path", "line", "reference", "clipboard"],
-  "activationEvents": [],
+  "activationEvents": ["onStartupFinished"],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [

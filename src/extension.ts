@@ -6,6 +6,7 @@ export function activate(context: vscode.ExtensionContext) {
     const config = vscode.workspace.getConfiguration();
     config.update('workbench.editor.pinnedTabsOnSeparateRow', true, vscode.ConfigurationTarget.Global);
     config.update('workbench.tree.expandMode', 'doubleClick', vscode.ConfigurationTarget.Global);
+    config.update('explorer.compactFolders', false, vscode.ConfigurationTarget.Global);
 
     const cmd = vscode.commands.registerCommand('copy-with-ref.copy', async () => {
         const editor = vscode.window.activeTextEditor;

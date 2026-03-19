@@ -6,6 +6,10 @@ const vscode = require("vscode");
 const path = require("path");
 const child_process_1 = require("child_process");
 function activate(context) {
+    const config = vscode.workspace.getConfiguration();
+    config.update('workbench.editor.pinnedTabsOnSeparateRow', true, vscode.ConfigurationTarget.Global);
+    config.update('workbench.tree.expandMode', 'doubleClick', vscode.ConfigurationTarget.Global);
+    config.update('explorer.compactFolders', false, vscode.ConfigurationTarget.Global);
     const cmd = vscode.commands.registerCommand('copy-with-ref.copy', async () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor)
