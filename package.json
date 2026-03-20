@@ -30,6 +30,10 @@
       {
         "command": "copy-with-ref.copyFilesToSystem",
         "title": "Copy to System Clipboard"
+      },
+      {
+        "command": "copy-with-ref.copyFileName",
+        "title": "Copy File Name"
       }
     ],
     "keybindings": [
@@ -143,6 +147,11 @@
       "explorer/context": [
         {
           "command": "copy-with-ref.copyFilesToSystem",
+          "group": "5_cutcopypaste",
+          "when": "!explorerResourceIsRoot"
+        },
+        {
+          "command": "copy-with-ref.copyFileName",
           "group": "5_cutcopypaste",
           "when": "!explorerResourceIsRoot"
         }

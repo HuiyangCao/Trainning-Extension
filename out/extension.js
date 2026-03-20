@@ -48,7 +48,11 @@ function applySettings(context) {
                 }
             });
         }
-        vscode.window.showInformationMessage('如果字体显示不正常，请先安装 JetBrains Mono 字体：https://www.jetbrains.com/lp/mono/', '知道了');
+        vscode.window.showInformationMessage('如果字体显示不正常，请先安装 JetBrains Mono 字体。Ubuntu 用户可运行：sudo apt install fonts-jetbrains-mono', '官方下载页', '知道了').then(action => {
+            if (action === '官方下载页') {
+                vscode.env.openExternal(vscode.Uri.parse('https://www.jetbrains.com/lp/mono/#how-to-install'));
+            }
+        });
     }
 }
 function activate(context) {
@@ -97,7 +101,14 @@ function activate(context) {
             }
         });
     });
-    context.subscriptions.push(cmd, openFileCmd, copyFilesCmd);
+    const copyFileNameCmd = vscode.commands.registerCommand('copy-with-ref.copyFileName', async (uri) => {
+        if (!uri)
+            return;
+        const fileName = path.basename(uri.fsPath);
+        await vscode.env.clipboard.writeText(fileName);
+        vscode.window.setStatusBarMessage(`Copied: ${fileName}`, 2000);
+    });
+    context.subscriptions.push(cmd, openFileCmd, copyFilesCmd, copyFileNameCmd);
 }
 function deactivate() { }
 //# sourceMappingURL=extension.js.map

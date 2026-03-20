@@ -129,7 +129,17 @@ export function activate(context: vscode.ExtensionContext) {
         }
     );
 
-    context.subscriptions.push(cmd, openFileCmd, copyFilesCmd);
+    const copyFileNameCmd = vscode.commands.registerCommand(
+        'copy-with-ref.copyFileName',
+        async (uri: vscode.Uri) => {
+            if (!uri) return;
+            const fileName = path.basename(uri.fsPath);
+            await vscode.env.clipboard.writeText(fileName);
+            vscode.window.setStatusBarMessage(`Copied: ${fileName}`, 2000);
+        }
+    );
+
+    context.subscriptions.push(cmd, openFileCmd, copyFilesCmd, copyFileNameCmd);
 }
 
 export function deactivate() {}
