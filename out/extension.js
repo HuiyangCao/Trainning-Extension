@@ -11,7 +11,8 @@ const FONT_SIZE = 14;
 // Keybindings managed via user keybindings.json (highest priority, overrides all defaults)
 const CUSTOM_KEYBINDINGS = [
     { key: 'ctrl+alt+e', command: 'copy-with-ref.revealFolderInExplorer' },
-    // Copy with ref
+    // Copy with ref (remove default: open native console)
+    { key: 'ctrl+shift+c', command: '-workbench.action.terminal.openNativeConsole' },
     { key: 'ctrl+shift+c', command: 'copy-with-ref.copy', when: 'editorTextFocus' },
     // Run to Cursor
     { key: 'ctrl+shift+q', command: 'editor.debug.action.runToCursor' },
@@ -30,42 +31,56 @@ const CUSTOM_KEYBINDINGS = [
     { key: 'ctrl+k ctrl+d', command: '-editor.action.moveSelectionToNextFindMatch', when: 'editorFocus' },
     { key: 'ctrl+k shift+enter', command: '-workbench.action.pinEditor', when: '!activeEditorIsPinned' },
     { key: 'ctrl+; d', command: '-jupyter.moveCellsDown', when: 'editorTextFocus && jupyter.hascodecells && !jupyter.webExtension && !notebookEditorFocused' },
-    // Format selection with Ctrl+Shift+Alt+F
-    { key: 'ctrl+shift+alt+f', command: 'editor.action.formatSelection', when: 'editorHasDocumentSelectionFormattingProvider && editorTextFocus && !editorReadonly' },
-    { key: 'ctrl+k ctrl+f', command: '-editor.action.formatSelection', when: 'editorHasDocumentSelectionFormattingProvider && editorTextFocus && !editorReadonly' },
-    // Shift+Enter in terminal: newline without execute
+    // Shift+Enter in terminal: newline without execute (remove defaults that conflict)
+    { key: 'shift+enter', command: '-editor.action.insertLineAfter', when: 'editorTextFocus && !editorReadonly' },
+    { key: 'shift+enter', command: '-python.execSelectionInTerminal', when: 'editorTextFocus && !findInputFocussed && !replaceInputFocussed && editorLangId == \'python\'' },
+    { key: 'shift+enter', command: '-notebook.cell.executeAndSelectBelow', when: 'notebookCellListFocused && !inputFocus' },
     { key: 'shift+enter', command: 'workbench.action.terminal.sendSequence', args: { text: '\u001b\r' }, when: 'terminalFocus' },
 ];
 function applyUserKeybindings(context) {
     // Derive User dir from globalStorageUri: .../User/globalStorage/ext-id -> .../User
     const userDir = path.resolve(context.globalStorageUri.fsPath, '..', '..');
     const kbPath = path.join(userDir, 'keybindings.json');
-    let content = '';
+    let raw = '';
     try {
-        content = fs.readFileSync(kbPath, 'utf8');
+        raw = fs.readFileSync(kbPath, 'utf8');
     }
     catch { }
-    // Deduplicate by checking if the key+command combo already exists in the file
-    const toAdd = CUSTOM_KEYBINDINGS.filter(e => {
-        const sig = `"key":"${e.key}","command":"${e.command}"`;
-        return !content.replace(/\s/g, '').includes(sig.replace(/\s/g, ''));
-    });
-    if (!toAdd.length)
+    // Strip comments and trailing commas, then parse existing entries
+    const stripped = raw.replace(/\/\/.*$/gm, '').replace(/,\s*([\]}])/g, '$1');
+    let existing = [];
+    try {
+        existing = JSON.parse(stripped || '[]');
+    }
+    catch {
+        existing = [];
+    }
+    // Build identity key: key + command uniquely identifies a keybinding entry
+    const identity = (e) => `${e.key}|${e.command}`;
+    // Index existing entries by identity for fast lookup
+    const existingMap = new Map();
+    existing.forEach((e, i) => existingMap.set(identity(e), { index: i, entry: e }));
+    let changed = false;
+    for (const desired of CUSTOM_KEYBINDINGS) {
+        const id = identity(desired);
+        const found = existingMap.get(id);
+        if (found) {
+            // Update if different (e.g. when/args changed)
+            if (JSON.stringify(found.entry) !== JSON.stringify(desired)) {
+                existing[found.index] = desired;
+                changed = true;
+            }
+        }
+        else {
+            // Add new entry
+            existing.push(desired);
+            changed = true;
+        }
+    }
+    if (!changed)
         return;
-    const newLines = toAdd.map(e => `    ${JSON.stringify(e)}`).join(',\n');
-    if (!content.trim() || content.trim() === '[]') {
-        content = '[\n' + newLines + '\n]\n';
-    }
-    else {
-        // Insert before the last ]
-        const lastBracket = content.lastIndexOf(']');
-        if (lastBracket === -1)
-            return;
-        const before = content.substring(0, lastBracket).trimEnd();
-        const needsComma = !before.endsWith('[') && !before.endsWith(',');
-        content = before + (needsComma ? ',' : '') + '\n' + newLines + '\n]\n';
-    }
-    fs.writeFileSync(kbPath, content);
+    const lines = existing.map(e => `    ${JSON.stringify(e)}`).join(',\n');
+    fs.writeFileSync(kbPath, `[\n${lines}\n]\n`);
 }
 function applySettings(context) {
     const config = vscode.workspace.getConfiguration();
@@ -74,6 +89,10 @@ function applySettings(context) {
     config.update('workbench.tree.expandMode', 'doubleClick', vscode.ConfigurationTarget.Global);
     config.update('explorer.compactFolders', false, vscode.ConfigurationTarget.Global);
     config.update('workbench.list.openMode', 'doubleClick', vscode.ConfigurationTarget.Global);
+    // Disable automatic Python/conda environment activation
+    config.update('claudeCode.usePythonEnvironment', false, vscode.ConfigurationTarget.Global);
+    config.update('python.terminal.activateEnvironment', false, vscode.ConfigurationTarget.Global);
+    config.update('python.useEnvironmentsExtension', false, vscode.ConfigurationTarget.Global);
     // Default layout: hide auxiliary side bar
     vscode.commands.executeCommand('workbench.action.closeAuxiliaryBar');
     // JetBrains style

@@ -1,7 +1,7 @@
 {
   "name": "copy-with-ref",
-  "displayName": "Copy with File Reference",
-  "description": "Copy the current file path and line number reference to clipboard. Select code to get a range (e.g. src/foo.py:10-15), or just place the cursor for a single line ref. Useful for pasting into terminals, AI prompts, or issue trackers.",
+  "displayName": "一键配置 PyCharm 风格",
+  "description": "一键配置 PyCharm 风格的 VS Code 环境：Darcula 主题、JetBrains Mono 字体、文件树优化、快捷键绑定、文件引用复制等。",
   "version": "0.0.1",
   "publisher": "user",
   "repository": {
