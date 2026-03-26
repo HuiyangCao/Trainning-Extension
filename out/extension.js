@@ -6,39 +6,12 @@ const vscode = require("vscode");
 const path = require("path");
 const fs = require("fs");
 const child_process_1 = require("child_process");
-const FONT = 'JetBrains Mono, monospace';
-const FONT_SIZE = 14;
-// Keybindings managed via user keybindings.json (highest priority, overrides all defaults)
-const CUSTOM_KEYBINDINGS = [
-    { key: 'ctrl+alt+e', command: 'copy-with-ref.revealFolderInExplorer' },
-    // Copy with ref (remove default: open native console)
-    { key: 'ctrl+shift+c', command: '-workbench.action.terminal.openNativeConsole' },
-    { key: 'ctrl+shift+c', command: 'copy-with-ref.copy', when: 'editorTextFocus' },
-    // Run to Cursor
-    { key: 'ctrl+shift+q', command: 'editor.debug.action.runToCursor' },
-    // Ctrl+Q: close all diff editors instead of quit
-    { key: 'ctrl+q', command: '-workbench.action.quit' },
-    { key: 'ctrl+q', command: 'git.closeAllDiffEditors' },
-    // Ctrl+P: remove default quick open (we rely on other access methods)
-    { key: 'ctrl+p', command: '-workbench.action.quickOpen' },
-    { key: 'ctrl+p', command: '-workbench.action.quickOpenNavigateNextInFilePicker', when: 'inFilesPicker && inQuickOpen' },
-    // Ctrl+D: pin editor instead of add selection to next find match
-    { key: 'ctrl+d', command: '-editor.action.addSelectionToNextFindMatch', when: 'editorFocus' },
-    { key: 'ctrl+d', command: '-notebook.addFindMatchToSelection', when: 'config.notebook.multiCursor.enabled && notebookCellEditorFocused && activeEditor == \'workbench.editor.notebook\'' },
-    { key: 'ctrl+d', command: 'workbench.action.pinEditor', when: '!activeEditorIsPinned' },
-    { key: 'ctrl+shift+d', command: '-workbench.view.debug', when: 'viewContainer.workbench.view.debug.enabled' },
-    { key: 'ctrl+k d', command: '-workbench.files.action.compareWithSaved' },
-    { key: 'ctrl+k ctrl+d', command: '-editor.action.moveSelectionToNextFindMatch', when: 'editorFocus' },
-    { key: 'ctrl+k shift+enter', command: '-workbench.action.pinEditor', when: '!activeEditorIsPinned' },
-    { key: 'ctrl+; d', command: '-jupyter.moveCellsDown', when: 'editorTextFocus && jupyter.hascodecells && !jupyter.webExtension && !notebookEditorFocused' },
-    // Shift+Enter in terminal: newline without execute (remove defaults that conflict)
-    { key: 'shift+enter', command: '-editor.action.insertLineAfter', when: 'editorTextFocus && !editorReadonly' },
-    { key: 'shift+enter', command: '-python.execSelectionInTerminal', when: 'editorTextFocus && !findInputFocussed && !replaceInputFocussed && editorLangId == \'python\'' },
-    { key: 'shift+enter', command: '-notebook.cell.executeAndSelectBelow', when: 'notebookCellListFocused && !inputFocus' },
-    { key: 'shift+enter', command: 'workbench.action.terminal.sendSequence', args: { text: '\u001b\r' }, when: 'terminalFocus' },
-];
-function applyUserKeybindings(context) {
-    // Derive User dir from globalStorageUri: .../User/globalStorage/ext-id -> .../User
+function loadConfig(extensionPath) {
+    const configPath = path.join(extensionPath, 'config.json');
+    const raw = fs.readFileSync(configPath, 'utf8');
+    return JSON.parse(raw);
+}
+function applyUserKeybindings(context, keybindings) {
     const userDir = path.resolve(context.globalStorageUri.fsPath, '..', '..');
     const kbPath = path.join(userDir, 'keybindings.json');
     let raw = '';
@@ -46,7 +19,6 @@ function applyUserKeybindings(context) {
         raw = fs.readFileSync(kbPath, 'utf8');
     }
     catch { }
-    // Strip comments and trailing commas, then parse existing entries
     const stripped = raw.replace(/\/\/.*$/gm, '').replace(/,\s*([\]}])/g, '$1');
     let existing = [];
     try {
@@ -55,24 +27,20 @@ function applyUserKeybindings(context) {
     catch {
         existing = [];
     }
-    // Build identity key: key + command uniquely identifies a keybinding entry
     const identity = (e) => `${e.key}|${e.command}`;
-    // Index existing entries by identity for fast lookup
     const existingMap = new Map();
     existing.forEach((e, i) => existingMap.set(identity(e), { index: i, entry: e }));
     let changed = false;
-    for (const desired of CUSTOM_KEYBINDINGS) {
+    for (const desired of keybindings) {
         const id = identity(desired);
         const found = existingMap.get(id);
         if (found) {
-            // Update if different (e.g. when/args changed)
             if (JSON.stringify(found.entry) !== JSON.stringify(desired)) {
                 existing[found.index] = desired;
                 changed = true;
             }
         }
         else {
-            // Add new entry
             existing.push(desired);
             changed = true;
         }
@@ -82,42 +50,12 @@ function applyUserKeybindings(context) {
     const lines = existing.map(e => `    ${JSON.stringify(e)}`).join(',\n');
     fs.writeFileSync(kbPath, `[\n${lines}\n]\n`);
 }
-function applySettings(context) {
+function applySettings(context, settings) {
     const config = vscode.workspace.getConfiguration();
-    // UI behavior
-    config.update('workbench.editor.pinnedTabsOnSeparateRow', true, vscode.ConfigurationTarget.Global);
-    config.update('workbench.tree.expandMode', 'doubleClick', vscode.ConfigurationTarget.Global);
-    config.update('explorer.compactFolders', false, vscode.ConfigurationTarget.Global);
-    config.update('workbench.list.openMode', 'doubleClick', vscode.ConfigurationTarget.Global);
-    // Disable automatic Python/conda environment activation
-    config.update('claudeCode.usePythonEnvironment', false, vscode.ConfigurationTarget.Global);
-    config.update('python.terminal.activateEnvironment', false, vscode.ConfigurationTarget.Global);
-    config.update('python.useEnvironmentsExtension', false, vscode.ConfigurationTarget.Global);
-    // Default layout: hide auxiliary side bar
+    for (const [key, value] of Object.entries(settings)) {
+        config.update(key, value, vscode.ConfigurationTarget.Global);
+    }
     vscode.commands.executeCommand('workbench.action.closeAuxiliaryBar');
-    // JetBrains style
-    config.update('workbench.colorTheme', 'JetBrains Darcula Theme', vscode.ConfigurationTarget.Global);
-    config.update('editor.fontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('editor.fontSize', FONT_SIZE, vscode.ConfigurationTarget.Global);
-    config.update('editor.fontLigatures', true, vscode.ConfigurationTarget.Global);
-    config.update('terminal.integrated.fontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('terminal.integrated.fontSize', FONT_SIZE, vscode.ConfigurationTarget.Global);
-    config.update('debug.console.fontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('debug.console.fontSize', FONT_SIZE, vscode.ConfigurationTarget.Global);
-    config.update('notebook.outputFontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('notebook.outputFontSize', FONT_SIZE, vscode.ConfigurationTarget.Global);
-    config.update('chat.fontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('chat.fontSize', FONT_SIZE, vscode.ConfigurationTarget.Global);
-    config.update('editor.codeLensFontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('editor.inlayHints.fontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('editor.inlineSuggest.fontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('scm.inputFontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('notebook.markup.fontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('notebook.output.fontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('markdown.preview.fontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('gitlens.currentLine.fontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('gitlens.blame.fontFamily', FONT, vscode.ConfigurationTarget.Global);
-    // Notify if theme/font extension missing (only once per install)
     const notified = context.globalState.get('jetbrainsNotified');
     if (!notified) {
         context.globalState.update('jetbrainsNotified', true);
@@ -137,8 +75,9 @@ function applySettings(context) {
     }
 }
 function activate(context) {
-    applySettings(context);
-    applyUserKeybindings(context);
+    const cfg = loadConfig(context.extensionPath);
+    applySettings(context, cfg.settings);
+    applyUserKeybindings(context, cfg.keybindings);
     const cmd = vscode.commands.registerCommand('copy-with-ref.copy', async () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor)
@@ -215,7 +154,85 @@ function activate(context) {
         await vscode.env.clipboard.writeText(fileName);
         vscode.window.setStatusBarMessage(`Copied: ${fileName}`, 2000);
     });
-    context.subscriptions.push(cmd, copyFilesCmd, revealFolderCmd, copyFileNameCmd);
+    const killPythonDebugCmd = vscode.commands.registerCommand('copy-with-ref.killPythonDebug', () => {
+        const proc = (0, child_process_1.spawn)('sudo', ['pkill', '-9', '-f', 'python.*debug'], { stdio: 'ignore' });
+        proc.on('close', (code) => {
+            if (code === 0) {
+                vscode.window.showInformationMessage('已终止所有 Python 调试进程');
+            }
+            else {
+                // pkill 返回 1 表示没有匹配进程，也算正常
+                vscode.window.showInformationMessage('没有找到 Python 调试进程，或已全部终止');
+            }
+        });
+        proc.on('error', () => {
+            vscode.window.showErrorMessage('执行 sudo pkill 失败，请确认 sudo 免密配置');
+        });
+        // 同时停止 VS Code 内的调试会话
+        vscode.debug.stopDebugging();
+    });
+    // Debug 参数输入拦截：launch 配置中含 ${input:} 变量时，由我们接管输入
+    // 用户 ESC 取消输入则取消调试，而不是用空参数继续执行
+    const debugProvider = vscode.debug.registerDebugConfigurationProvider('*', {
+        async resolveDebugConfiguration(_folder, config) {
+            if (!config.args || !Array.isArray(config.args))
+                return config;
+            // 检查 args 中是否有 ${input:xxx} 变量
+            const inputPattern = /\$\{input:([^}]+)\}/;
+            const resolvedArgs = [];
+            for (const arg of config.args) {
+                const match = typeof arg === 'string' ? arg.match(inputPattern) : null;
+                if (match) {
+                    const inputName = match[1];
+                    // 查找 launch.json 中对应的 input 定义
+                    const inputDef = findInputDefinition(inputName);
+                    const value = await promptForInput(inputDef, inputName);
+                    if (value === undefined) {
+                        // 用户按了 ESC，取消调试
+                        return undefined;
+                    }
+                    resolvedArgs.push(arg.replace(inputPattern, value));
+                }
+                else {
+                    resolvedArgs.push(arg);
+                }
+            }
+            config.args = resolvedArgs;
+            return config;
+        }
+    }, vscode.DebugConfigurationProviderTriggerKind.Initial);
+    context.subscriptions.push(cmd, copyFilesCmd, revealFolderCmd, copyFileNameCmd, killPythonDebugCmd, debugProvider);
+}
+// 从 .vscode/launch.json 的 inputs 数组中查找对应定义
+function findInputDefinition(inputId) {
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders)
+        return undefined;
+    const launchPath = path.join(folders[0].uri.fsPath, '.vscode', 'launch.json');
+    try {
+        const raw = fs.readFileSync(launchPath, 'utf8');
+        const stripped = raw.replace(/\/\/.*$/gm, '').replace(/,\s*([\]}])/g, '$1');
+        const launch = JSON.parse(stripped);
+        const inputs = launch.inputs || [];
+        return inputs.find((i) => i.id === inputId);
+    }
+    catch {
+        return undefined;
+    }
+}
+// 根据 input 定义弹出输入框或选择框
+async function promptForInput(inputDef, inputName) {
+    if (inputDef?.type === 'pickString' && inputDef.options?.length) {
+        return vscode.window.showQuickPick(inputDef.options, {
+            placeHolder: inputDef.description || `选择参数: ${inputName}`,
+            ignoreFocusOut: true,
+        });
+    }
+    return vscode.window.showInputBox({
+        prompt: inputDef?.description || `输入参数: ${inputName}`,
+        value: inputDef?.default || '',
+        ignoreFocusOut: true,
+    });
 }
 function deactivate() { }
 //# sourceMappingURL=extension.js.map

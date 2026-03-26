@@ -33,10 +33,21 @@
       {
         "command": "copy-with-ref.revealFolderInExplorer",
         "title": "Reveal Folder in Explorer"
+      },
+      {
+        "command": "copy-with-ref.killPythonDebug",
+        "title": "Kill All Python Debug",
+        "icon": "$(close)"
       }
     ],
     "keybindings": [],
     "menus": {
+      "debug/toolBar": [
+        {
+          "command": "copy-with-ref.killPythonDebug",
+          "when": "inDebugMode"
+        }
+      ],
       "editor/context": [
         {
           "command": "copy-with-ref.copy",

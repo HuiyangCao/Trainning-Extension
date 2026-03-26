@@ -192,7 +192,95 @@ export function activate(context: vscode.ExtensionContext) {
         }
     );
 
-    context.subscriptions.push(cmd, copyFilesCmd, revealFolderCmd, copyFileNameCmd);
+    const killPythonDebugCmd = vscode.commands.registerCommand('copy-with-ref.killPythonDebug', () => {
+        const proc = spawn('sudo', ['pkill', '-9', '-f', 'python.*debug'], { stdio: 'ignore' });
+        proc.on('close', (code) => {
+            if (code === 0) {
+                vscode.window.showInformationMessage('已终止所有 Python 调试进程');
+            } else {
+                // pkill 返回 1 表示没有匹配进程，也算正常
+                vscode.window.showInformationMessage('没有找到 Python 调试进程，或已全部终止');
+            }
+        });
+        proc.on('error', () => {
+            vscode.window.showErrorMessage('执行 sudo pkill 失败，请确认 sudo 免密配置');
+        });
+        // 同时停止 VS Code 内的调试会话
+        vscode.debug.stopDebugging();
+    });
+
+    // Debug 参数输入拦截：launch 配置中含 ${input:} 变量时，由我们接管输入
+    // 用户 ESC 取消输入则取消调试，而不是用空参数继续执行
+    const debugProvider = vscode.debug.registerDebugConfigurationProvider('*', {
+        async resolveDebugConfiguration(
+            _folder: vscode.WorkspaceFolder | undefined,
+            config: vscode.DebugConfiguration,
+        ): Promise<vscode.DebugConfiguration | undefined> {
+            if (!config.args || !Array.isArray(config.args)) return config;
+
+            // 检查 args 中是否有 ${input:xxx} 变量
+            const inputPattern = /\$\{input:([^}]+)\}/;
+            const resolvedArgs: string[] = [];
+
+            for (const arg of config.args as string[]) {
+                const match = typeof arg === 'string' ? arg.match(inputPattern) : null;
+                if (match) {
+                    const inputName = match[1];
+                    // 查找 launch.json 中对应的 input 定义
+                    const inputDef = findInputDefinition(inputName);
+                    const value = await promptForInput(inputDef, inputName);
+                    if (value === undefined) {
+                        // 用户按了 ESC，取消调试
+                        return undefined;
+                    }
+                    resolvedArgs.push(arg.replace(inputPattern, value));
+                } else {
+                    resolvedArgs.push(arg);
+                }
+            }
+
+            config.args = resolvedArgs;
+            return config;
+        }
+    }, vscode.DebugConfigurationProviderTriggerKind.Initial);
+
+    context.subscriptions.push(cmd, copyFilesCmd, revealFolderCmd, copyFileNameCmd, killPythonDebugCmd, debugProvider);
+}
+
+// 从 .vscode/launch.json 的 inputs 数组中查找对应定义
+function findInputDefinition(inputId: string): { type: string; description?: string; options?: string[]; default?: string } | undefined {
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders) return undefined;
+
+    const launchPath = path.join(folders[0].uri.fsPath, '.vscode', 'launch.json');
+    try {
+        const raw = fs.readFileSync(launchPath, 'utf8');
+        const stripped = raw.replace(/\/\/.*$/gm, '').replace(/,\s*([\]}])/g, '$1');
+        const launch = JSON.parse(stripped);
+        const inputs: any[] = launch.inputs || [];
+        return inputs.find((i: any) => i.id === inputId);
+    } catch {
+        return undefined;
+    }
+}
+
+// 根据 input 定义弹出输入框或选择框
+async function promptForInput(
+    inputDef: { type: string; description?: string; options?: string[]; default?: string } | undefined,
+    inputName: string
+): Promise<string | undefined> {
+    if (inputDef?.type === 'pickString' && inputDef.options?.length) {
+        return vscode.window.showQuickPick(inputDef.options, {
+            placeHolder: inputDef.description || `选择参数: ${inputName}`,
+            ignoreFocusOut: true,
+        });
+    }
+
+    return vscode.window.showInputBox({
+        prompt: inputDef?.description || `输入参数: ${inputName}`,
+        value: inputDef?.default || '',
+        ignoreFocusOut: true,
+    });
 }
 
 export function deactivate() {}
