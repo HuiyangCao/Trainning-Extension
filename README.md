@@ -11,6 +11,14 @@
 
 自动安装到 VS Code；如果检测到 Cursor 也会同时安装。
 
+## 卸载
+
+```bash
+./uninstall.sh
+```
+
+自动回退 settings.json 和 keybindings.json 中本插件写入的配置，卸载编辑器扩展和 Darcula 主题，可选删除 JetBrains Mono 字体和构建产物。每步均有确认提示。
+
 ## 功能一览
 
 ### 1. 文件树与编辑器优化
