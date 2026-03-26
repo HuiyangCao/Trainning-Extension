@@ -36,6 +36,16 @@ EXT_ID="${PUBLISHER}.copy-with-ref"
 
 info "准备卸载扩展: ${EXT_ID}"
 
+# ---------- 回退 settings / keybindings ----------
+
+if confirm "回退扩展写入的 settings 和 keybindings 配置" "python3 uninstall_config.py"; then
+    if python3 "$(dirname "$0")/uninstall_config.py"; then
+        success "配置回退完成"
+    else
+        error "配置回退失败"
+    fi
+fi
+
 # ---------- 卸载编辑器扩展 ----------
 
 DARCULA_EXT="Anan.jetbrains-darcula-theme"

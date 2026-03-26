@@ -3,71 +3,43 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { spawn } from 'child_process';
 
-const FONT = 'JetBrains Mono, monospace';
-const FONT_SIZE = 14;
+interface ExtConfig {
+    settings: Record<string, unknown>;
+    keybindings: Record<string, unknown>[];
+}
 
-// Keybindings managed via user keybindings.json (highest priority, overrides all defaults)
-const CUSTOM_KEYBINDINGS: Record<string, unknown>[] = [
-    { key: 'ctrl+alt+e', command: 'copy-with-ref.revealFolderInExplorer' },
-    // Copy with ref (remove default: open native console)
-    { key: 'ctrl+shift+c', command: '-workbench.action.terminal.openNativeConsole' },
-    { key: 'ctrl+shift+c', command: 'copy-with-ref.copy', when: 'editorTextFocus' },
-    // Run to Cursor
-    { key: 'ctrl+shift+q', command: 'editor.debug.action.runToCursor' },
-    // Ctrl+Q: close all diff editors instead of quit
-    { key: 'ctrl+q', command: '-workbench.action.quit' },
-    { key: 'ctrl+q', command: 'git.closeAllDiffEditors' },
-    // Ctrl+P: remove default quick open (we rely on other access methods)
-    { key: 'ctrl+p', command: '-workbench.action.quickOpen' },
-    { key: 'ctrl+p', command: '-workbench.action.quickOpenNavigateNextInFilePicker', when: 'inFilesPicker && inQuickOpen' },
-    // Ctrl+D: pin editor instead of add selection to next find match
-    { key: 'ctrl+d', command: '-editor.action.addSelectionToNextFindMatch', when: 'editorFocus' },
-    { key: 'ctrl+d', command: '-notebook.addFindMatchToSelection', when: 'config.notebook.multiCursor.enabled && notebookCellEditorFocused && activeEditor == \'workbench.editor.notebook\'' },
-    { key: 'ctrl+d', command: 'workbench.action.pinEditor', when: '!activeEditorIsPinned' },
-    { key: 'ctrl+shift+d', command: '-workbench.view.debug', when: 'viewContainer.workbench.view.debug.enabled' },
-    { key: 'ctrl+k d', command: '-workbench.files.action.compareWithSaved' },
-    { key: 'ctrl+k ctrl+d', command: '-editor.action.moveSelectionToNextFindMatch', when: 'editorFocus' },
-    { key: 'ctrl+k shift+enter', command: '-workbench.action.pinEditor', when: '!activeEditorIsPinned' },
-    { key: 'ctrl+; d', command: '-jupyter.moveCellsDown', when: 'editorTextFocus && jupyter.hascodecells && !jupyter.webExtension && !notebookEditorFocused' },
-    // Shift+Enter in terminal: newline without execute (remove defaults that conflict)
-    { key: 'shift+enter', command: '-editor.action.insertLineAfter', when: 'editorTextFocus && !editorReadonly' },
-    { key: 'shift+enter', command: '-python.execSelectionInTerminal', when: 'editorTextFocus && !findInputFocussed && !replaceInputFocussed && editorLangId == \'python\'' },
-    { key: 'shift+enter', command: '-notebook.cell.executeAndSelectBelow', when: 'notebookCellListFocused && !inputFocus' },
-    { key: 'shift+enter', command: 'workbench.action.terminal.sendSequence', args: { text: '\u001b\r' }, when: 'terminalFocus' },
-];
+function loadConfig(extensionPath: string): ExtConfig {
+    const configPath = path.join(extensionPath, 'config.json');
+    const raw = fs.readFileSync(configPath, 'utf8');
+    return JSON.parse(raw);
+}
 
-function applyUserKeybindings(context: vscode.ExtensionContext) {
-    // Derive User dir from globalStorageUri: .../User/globalStorage/ext-id -> .../User
+function applyUserKeybindings(context: vscode.ExtensionContext, keybindings: Record<string, unknown>[]) {
     const userDir = path.resolve(context.globalStorageUri.fsPath, '..', '..');
     const kbPath = path.join(userDir, 'keybindings.json');
 
     let raw = '';
     try { raw = fs.readFileSync(kbPath, 'utf8'); } catch { }
 
-    // Strip comments and trailing commas, then parse existing entries
     const stripped = raw.replace(/\/\/.*$/gm, '').replace(/,\s*([\]}])/g, '$1');
     let existing: Record<string, unknown>[] = [];
     try { existing = JSON.parse(stripped || '[]'); } catch { existing = []; }
 
-    // Build identity key: key + command uniquely identifies a keybinding entry
     const identity = (e: Record<string, unknown>) => `${e.key}|${e.command}`;
 
-    // Index existing entries by identity for fast lookup
     const existingMap = new Map<string, { index: number; entry: Record<string, unknown> }>();
     existing.forEach((e, i) => existingMap.set(identity(e), { index: i, entry: e }));
 
     let changed = false;
-    for (const desired of CUSTOM_KEYBINDINGS) {
+    for (const desired of keybindings) {
         const id = identity(desired);
         const found = existingMap.get(id);
         if (found) {
-            // Update if different (e.g. when/args changed)
             if (JSON.stringify(found.entry) !== JSON.stringify(desired)) {
                 existing[found.index] = desired;
                 changed = true;
             }
         } else {
-            // Add new entry
             existing.push(desired);
             changed = true;
         }
@@ -79,47 +51,15 @@ function applyUserKeybindings(context: vscode.ExtensionContext) {
     fs.writeFileSync(kbPath, `[\n${lines}\n]\n`);
 }
 
-function applySettings(context: vscode.ExtensionContext) {
+function applySettings(context: vscode.ExtensionContext, settings: Record<string, unknown>) {
     const config = vscode.workspace.getConfiguration();
 
-    // UI behavior
-    config.update('workbench.editor.pinnedTabsOnSeparateRow', true, vscode.ConfigurationTarget.Global);
-    config.update('workbench.tree.expandMode', 'doubleClick', vscode.ConfigurationTarget.Global);
-    config.update('explorer.compactFolders', false, vscode.ConfigurationTarget.Global);
-    config.update('workbench.list.openMode', 'doubleClick', vscode.ConfigurationTarget.Global);
+    for (const [key, value] of Object.entries(settings)) {
+        config.update(key, value, vscode.ConfigurationTarget.Global);
+    }
 
-    // Disable automatic Python/conda environment activation
-    config.update('claudeCode.usePythonEnvironment', false, vscode.ConfigurationTarget.Global);
-    config.update('python.terminal.activateEnvironment', false, vscode.ConfigurationTarget.Global);
-    config.update('python.useEnvironmentsExtension', false, vscode.ConfigurationTarget.Global);
-
-    // Default layout: hide auxiliary side bar
     vscode.commands.executeCommand('workbench.action.closeAuxiliaryBar');
 
-    // JetBrains style
-    config.update('workbench.colorTheme', 'JetBrains Darcula Theme', vscode.ConfigurationTarget.Global);
-    config.update('editor.fontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('editor.fontSize', FONT_SIZE, vscode.ConfigurationTarget.Global);
-    config.update('editor.fontLigatures', true, vscode.ConfigurationTarget.Global);
-    config.update('terminal.integrated.fontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('terminal.integrated.fontSize', FONT_SIZE, vscode.ConfigurationTarget.Global);
-    config.update('debug.console.fontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('debug.console.fontSize', FONT_SIZE, vscode.ConfigurationTarget.Global);
-    config.update('notebook.outputFontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('notebook.outputFontSize', FONT_SIZE, vscode.ConfigurationTarget.Global);
-    config.update('chat.fontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('chat.fontSize', FONT_SIZE, vscode.ConfigurationTarget.Global);
-    config.update('editor.codeLensFontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('editor.inlayHints.fontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('editor.inlineSuggest.fontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('scm.inputFontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('notebook.markup.fontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('notebook.output.fontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('markdown.preview.fontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('gitlens.currentLine.fontFamily', FONT, vscode.ConfigurationTarget.Global);
-    config.update('gitlens.blame.fontFamily', FONT, vscode.ConfigurationTarget.Global);
-
-    // Notify if theme/font extension missing (only once per install)
     const notified = context.globalState.get<boolean>('jetbrainsNotified');
     if (!notified) {
         context.globalState.update('jetbrainsNotified', true);
@@ -151,8 +91,9 @@ function applySettings(context: vscode.ExtensionContext) {
 }
 
 export function activate(context: vscode.ExtensionContext) {
-    applySettings(context);
-    applyUserKeybindings(context);
+    const cfg = loadConfig(context.extensionPath);
+    applySettings(context, cfg.settings);
+    applyUserKeybindings(context, cfg.keybindings);
 
     const cmd = vscode.commands.registerCommand('copy-with-ref.copy', async () => {
         const editor = vscode.window.activeTextEditor;
