@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { spawn } from 'child_process';
 import { EXTENSION_ID } from './constants';
 
 interface SshHostNode {
@@ -10,6 +11,7 @@ interface SshHostNode {
     hostname?: string;
     user?: string;
     port?: string;
+    latency?: number | null;
 }
 
 interface SshErrorNode {
@@ -97,10 +99,58 @@ class SshServerProvider implements vscode.TreeDataProvider<SshTreeNode> {
     private configPath: string;
     private parseError: string | null = null;
     private fileWatcher: vscode.FileSystemWatcher | null = null;
+    private pingTimer: NodeJS.Timeout | null = null;
+    private hosts: SshHostNode[] = [];
 
     constructor() {
         this.configPath = path.join(os.homedir(), '.ssh', 'config');
         this.setupFileWatcher();
+        this.startPingTimer();
+    }
+
+    private async pingHost(host: SshHostNode): Promise<number | null> {
+        const target = host.hostname || host.host;
+        return new Promise((resolve) => {
+            const start = Date.now();
+            const proc = spawn('ping', ['-c', '1', '-W', '3', target], { timeout: 5000 });
+            let output = '';
+            proc.stdout.on('data', (data) => { output += data.toString(); });
+            proc.on('close', (code) => {
+                if (code === 0) {
+                    const match = output.match(/time[=<](\d+\.?\d*)\s*ms/);
+                    if (match) {
+                        resolve(Math.round(parseFloat(match[1])));
+                    } else {
+                        resolve(Date.now() - start);
+                    }
+                } else {
+                    resolve(null);
+                }
+            });
+            proc.on('error', () => resolve(null));
+        });
+    }
+
+    private async pingAll(): Promise<void> {
+        for (const host of this.hosts) {
+            host.latency = await this.pingHost(host);
+        }
+        this._onDidChangeTreeData.fire();
+    }
+
+    private startPingTimer(): void {
+        if (this.pingTimer) {
+            clearInterval(this.pingTimer);
+        }
+        this.pingAll();
+        this.pingTimer = setInterval(() => this.pingAll(), 5000);
+    }
+
+    private stopPingTimer(): void {
+        if (this.pingTimer) {
+            clearInterval(this.pingTimer);
+            this.pingTimer = null;
+        }
     }
 
     private setupFileWatcher(): void {
@@ -127,10 +177,19 @@ class SshServerProvider implements vscode.TreeDataProvider<SshTreeNode> {
         if (this.fileWatcher) {
             this.fileWatcher.dispose();
         }
+        this.stopPingTimer();
     }
 
     refresh(): void {
+        this.hosts = [];
+        this.parseError = null;
+        try {
+            this.hosts = parseSshConfig(this.configPath);
+        } catch (error) {
+            this.parseError = error instanceof Error ? error.message : String(error);
+        }
         this._onDidChangeTreeData.fire();
+        this.pingAll();
     }
 
     getParseError(): string | null {
@@ -148,35 +207,41 @@ class SshServerProvider implements vscode.TreeDataProvider<SshTreeNode> {
             return treeItem;
         }
 
-        const treeItem = new vscode.TreeItem(element.host, vscode.TreeItemCollapsibleState.None);
+        const label = element.latency !== undefined && element.latency !== null
+            ? `${element.host}  ${element.latency}ms`
+            : element.host;
+        const treeItem = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
         treeItem.tooltip = this.buildTooltip(element);
         treeItem.iconPath = new vscode.ThemeIcon('remote');
-        treeItem.command = {
-            command: `${EXTENSION_ID}.connectSsh`,
-            title: 'Connect to SSH Host',
-            arguments: [element],
-        };
+        treeItem.contextValue = 'sshHost';
         return treeItem;
     }
 
     getChildren(element?: SshTreeNode): Thenable<SshTreeNode[]> {
-        // 只有一层，无 children
         if (element) {
             return Promise.resolve([]);
         }
 
-        try {
-            const hosts = parseSshConfig(this.configPath);
-            this.parseError = null;
-            return Promise.resolve(hosts);
-        } catch (error) {
-            const errorMsg = error instanceof Error ? error.message : String(error);
-            this.parseError = errorMsg;
+        if (this.parseError) {
             return Promise.resolve([{
                 kind: 'error',
-                message: '❌ ' + errorMsg,
+                message: '❌ ' + this.parseError,
             }]);
         }
+
+        if (this.hosts.length === 0) {
+            try {
+                this.hosts = parseSshConfig(this.configPath);
+            } catch (error) {
+                const errorMsg = error instanceof Error ? error.message : String(error);
+                this.parseError = errorMsg;
+                return Promise.resolve([{
+                    kind: 'error',
+                    message: '❌ ' + errorMsg,
+                }]);
+            }
+        }
+        return Promise.resolve(this.hosts);
     }
 
     private buildTooltip(element: SshHostNode): string {
@@ -189,6 +254,11 @@ class SshServerProvider implements vscode.TreeDataProvider<SshTreeNode> {
         }
         if (element.port) {
             parts.push(`Port: ${element.port}`);
+        }
+        if (element.latency !== undefined && element.latency !== null) {
+            parts.push(`Latency: ${element.latency}ms`);
+        } else if (element.latency === null) {
+            parts.push('Latency: unreachable');
         }
         return parts.join('\n');
     }
@@ -223,15 +293,11 @@ export function registerSshServerView(context: vscode.ExtensionContext): vscode.
         showCollapseAll: false,
     });
 
-    // 注册 connectSsh 命令
     const connectCmd = vscode.commands.registerCommand(`${EXTENSION_ID}.connectSsh`, connectSsh);
-
-    // 注册 refreshSsh 命令
     const refreshCmd = vscode.commands.registerCommand(`${EXTENSION_ID}.refreshSsh`, () => {
         provider.refresh();
     });
 
-    // 创建一个 disposable 来清理 provider 的 file watcher
     const providerDisposable = vscode.Disposable.from(
         new vscode.Disposable(() => provider.dispose())
     );

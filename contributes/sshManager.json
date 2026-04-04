@@ -2,7 +2,8 @@
   "commands": [
     {
       "command": "user_extension.connectSsh",
-      "title": "Connect to SSH Host"
+      "title": "Open terminal",
+      "icon": "$(terminal)"
     },
     {
       "command": "user_extension.refreshSsh",
@@ -24,6 +25,13 @@
         "command": "user_extension.refreshSsh",
         "when": "view == user_extension_ssh",
         "group": "navigation"
+      }
+    ],
+    "view/item/context": [
+      {
+        "command": "user_extension.connectSsh",
+        "when": "view == user_extension_ssh && viewItem == sshHost",
+        "group": "inline"
       }
     ]
   }
