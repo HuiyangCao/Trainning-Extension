@@ -55,6 +55,34 @@
         "command": "user_extension.refreshCommands",
         "title": "Refresh Commands",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "user_extension.connectSsh",
+        "title": "Connect to SSH Host"
+      },
+      {
+        "command": "user_extension.refreshSsh",
+        "title": "Refresh SSH Hosts",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "user_extension.addBookmark",
+        "title": "Add Bookmark",
+        "icon": "$(add)"
+      },
+      {
+        "command": "user_extension.removeBookmark",
+        "title": "Remove Bookmark",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "user_extension.openBookmark",
+        "title": "Open Bookmark"
+      },
+      {
+        "command": "user_extension.refreshWeb",
+        "title": "Refresh Web Explorer",
+        "icon": "$(refresh)"
       }
     ],
     "keybindings": [],
@@ -72,6 +100,14 @@
         {
           "id": "user_extension_commands",
           "name": "Commands"
+        },
+        {
+          "id": "user_extension_ssh",
+          "name": "SSH Servers"
+        },
+        {
+          "id": "user_extension_web",
+          "name": "Explorer"
         }
       ]
     },
@@ -81,6 +117,28 @@
           "command": "user_extension.refreshCommands",
           "when": "view == user_extension_commands",
           "group": "navigation"
+        },
+        {
+          "command": "user_extension.refreshSsh",
+          "when": "view == user_extension_ssh",
+          "group": "navigation"
+        },
+        {
+          "command": "user_extension.addBookmark",
+          "when": "view == user_extension_web",
+          "group": "navigation"
+        },
+        {
+          "command": "user_extension.refreshWeb",
+          "when": "view == user_extension_web",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "user_extension.removeBookmark",
+          "when": "view == user_extension_web && viewItem == bookmarkItem",
+          "group": "inline"
         }
       ],
       "debug/toolBar": [

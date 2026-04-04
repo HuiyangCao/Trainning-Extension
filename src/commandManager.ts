@@ -34,7 +34,39 @@ class CommandManagerProvider implements vscode.TreeDataProvider<CommandNode> {
     readonly onDidChangeTreeData: vscode.Event<CommandNode | undefined | null | void> =
         this._onDidChangeTreeData.event;
 
-    constructor(private extensionPath: string, private context: vscode.ExtensionContext) {}
+    private fileWatcher: vscode.FileSystemWatcher | null = null;
+
+    constructor(private extensionPath: string, private context: vscode.ExtensionContext) {
+        this.setupFileWatcher();
+    }
+
+    private setupFileWatcher(): void {
+        try {
+            const configDir = path.join(this.extensionPath, 'command_config');
+            const pattern = new vscode.RelativePattern(configDir, '*.json');
+            this.fileWatcher = vscode.workspace.createFileSystemWatcher(pattern);
+
+            this.fileWatcher.onDidChange(() => {
+                this.refresh();
+            });
+
+            this.fileWatcher.onDidCreate(() => {
+                this.refresh();
+            });
+
+            this.fileWatcher.onDidDelete(() => {
+                this.refresh();
+            });
+        } catch (error) {
+            console.error('Failed to setup file watcher for command config:', error);
+        }
+    }
+
+    dispose(): void {
+        if (this.fileWatcher) {
+            this.fileWatcher.dispose();
+        }
+    }
 
     refresh(): void {
         this._onDidChangeTreeData.fire();
@@ -192,11 +224,16 @@ function replaceParameters(command: string, params: Record<string, string>): str
 }
 
 function getOrCreateTerminal(name: string = 'Command Manager'): vscode.Terminal {
-    const existing = vscode.window.terminals.find(t => t.name === name);
-    if (existing) {
-        return existing;
+    // 优先使用活跃终端，其次查找同名终端，最后创建新终端
+    let terminal = vscode.window.activeTerminal;
+    if (!terminal) {
+        const existing = vscode.window.terminals.find(t => t.name === name);
+        if (existing) {
+            return existing;
+        }
+        terminal = vscode.window.createTerminal(name);
     }
-    return vscode.window.createTerminal(name);
+    return terminal;
 }
 
 export function registerCommandManagerView(context: vscode.ExtensionContext): vscode.Disposable[] {
@@ -231,10 +268,10 @@ export function registerCommandManagerView(context: vscode.ExtensionContext): vs
                 // Replace parameters in command
                 const finalCmd = replaceParameters(cmdItem.command, params);
 
-                // Get or create terminal and execute
+                // Get or create terminal and execute command
                 const terminal = getOrCreateTerminal('Command Manager');
                 terminal.show(true);
-                terminal.sendText(finalCmd);
+                terminal.sendText(finalCmd, true);
             } catch (e) {
                 vscode.window.showErrorMessage(`Error running command: ${e}`);
             }
@@ -261,6 +298,9 @@ export function registerCommandManagerView(context: vscode.ExtensionContext): vs
         provider.refresh();
     });
     disposables.push(refreshDisposable);
+
+    // Add provider disposal
+    disposables.push(new vscode.Disposable(() => provider.dispose()));
 
     return disposables;
 }

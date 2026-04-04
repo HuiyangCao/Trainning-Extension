@@ -10,6 +10,8 @@ import {
 } from './commands';
 import { registerDebugConfigurationProviderAndCommand } from './debug';
 import { registerCommandManagerView } from './commandManager';
+import { registerSshServerView } from './sshManager';
+import { registerWebExplorerView } from './webExplorer';
 
 export function activate(context: vscode.ExtensionContext) {
     const cfg = loadConfig(context.extensionPath);
@@ -24,8 +26,10 @@ export function activate(context: vscode.ExtensionContext) {
     const killPythonDebugCmd = registerKillPythonDebugCommand();
     const debugProvider = registerDebugConfigurationProviderAndCommand(context);
     const cmdMgrDisposables = registerCommandManagerView(context);
+    const sshDisposables = registerSshServerView(context);
+    const webDisposables = registerWebExplorerView(context);
 
-    context.subscriptions.push(cmd, copyFilesCmd, addFavoriteFolderCmd, revealFolderCmd, copyFileNameCmd, killPythonDebugCmd, debugProvider, ...cmdMgrDisposables);
+    context.subscriptions.push(cmd, copyFilesCmd, addFavoriteFolderCmd, revealFolderCmd, copyFileNameCmd, killPythonDebugCmd, debugProvider, ...cmdMgrDisposables, ...sshDisposables, ...webDisposables);
 }
 
 export function deactivate() {}
