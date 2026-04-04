@@ -1,0 +1,42 @@
+{
+  "commands": [
+    {
+      "command": "user_extension.runCommand",
+      "title": "Run Command"
+    },
+    {
+      "command": "user_extension.openCommandConfig",
+      "title": "Edit Config",
+      "icon": "$(edit)"
+    },
+    {
+      "command": "user_extension.refreshCommands",
+      "title": "Refresh Commands",
+      "icon": "$(refresh)"
+    }
+  ],
+  "views": {
+    "user_extension": [
+      {
+        "id": "user_extension_commands",
+        "name": "Commands"
+      }
+    ]
+  },
+  "menus": {
+    "view/title": [
+      {
+        "command": "user_extension.refreshCommands",
+        "when": "view == user_extension_commands",
+        "group": "navigation"
+      }
+    ],
+    "view/item/context": [
+      {
+        "command": "user_extension.openCommandConfig",
+        "when": "view == user_extension_commands && viewItem == category",
+        "group": "inline"
+      }
+    ]
+  }
+}

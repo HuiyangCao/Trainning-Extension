@@ -149,6 +149,26 @@ class CommandManagerProvider implements vscode.TreeDataProvider<CommandNode> {
     }
 }
 
+/**
+ * 从命令字符串中扫描 {paramName} 占位符，提取参数名列表。
+ * 转义的 \{...\} 不会被提取。
+ */
+function extractParamNames(command: string): string[] {
+    const names: string[] = [];
+    const seen = new Set<string>();
+    // 匹配 {name}，但排除前面有 \ 的转义
+    const regex = /(?<!\\)\{(\w+)\}/g;
+    let match;
+    while ((match = regex.exec(command)) !== null) {
+        const name = match[1];
+        if (!seen.has(name)) {
+            seen.add(name);
+            names.push(name);
+        }
+    }
+    return names;
+}
+
 async function collectParameters(
     categoryData: any,
     cmdItem: CommandItemNode,
@@ -157,19 +177,14 @@ async function collectParameters(
 ): Promise<Record<string, string> | undefined> {
     const result: Record<string, string> = {};
 
-    // Determine which parameters to collect
-    let paramDefs: Record<string, Parameter> = {};
-    const paramNames: string[] = [];
+    // 合并参数定义：全局 parameters + 命令内联 parameters
+    const paramDefs: Record<string, Parameter> = {
+        ...(categoryData.parameters || {}),
+        ...(cmdItem.parameters || {}),
+    };
 
-    if (cmdItem.parameter_refs && cmdItem.parameter_refs.length > 0) {
-        // Use global parameter_refs
-        paramNames.push(...cmdItem.parameter_refs);
-        paramDefs = categoryData.parameters || {};
-    } else if (cmdItem.parameters && typeof cmdItem.parameters === 'object') {
-        // Use inline parameters
-        paramDefs = cmdItem.parameters;
-        paramNames.push(...Object.keys(cmdItem.parameters));
-    }
+    // 从命令字符串中自动扫描需要的参数
+    const paramNames = extractParamNames(cmdItem.command);
 
     // Collect each parameter
     for (const paramName of paramNames) {
@@ -184,8 +199,16 @@ async function collectParameters(
 
         let value: string | undefined;
 
-        if (paramDef.type === 'select' && paramDef.options) {
-            // Quick pick with last value first
+        if (paramDef.type === 'auto') {
+            // auto 参数：标记为环境变量，在终端中由 shell 执行
+            const command = paramDef.command || '';
+            if (!command) {
+                vscode.window.showWarningMessage(`Auto parameter '${paramName}' has no command defined`);
+                continue;
+            }
+            // 存储原始命令，后续由 buildTerminalCommand 处理
+            value = command;
+        } else if (paramDef.type === 'select' && paramDef.options) {
             const options = paramDef.options;
             const items = options.map((opt: string) => ({
                 label: opt,
@@ -198,7 +221,7 @@ async function collectParameters(
             });
 
             if (!selected) {
-                return undefined; // User cancelled
+                return undefined;
             }
             value = selected.label;
         } else if (paramDef.type === 'string') {
@@ -209,7 +232,7 @@ async function collectParameters(
             });
 
             if (input === undefined) {
-                return undefined; // User cancelled
+                return undefined;
             }
             value = input;
         } else {
@@ -219,20 +242,63 @@ async function collectParameters(
             continue;
         }
 
-        // Save to workspace state
-        await context.workspaceState.update(stateKey, value);
-        result[paramName] = value;
+        // auto 参数不保存到 workspaceState（每次动态获取）
+        if (paramDef.type !== 'auto') {
+            await context.workspaceState.update(stateKey, value);
+        }
+        result[paramName] = value!;
     }
 
     return result;
 }
 
-function replaceParameters(command: string, params: Record<string, string>): string {
-    let result = command;
+/**
+ * 构建最终发送到终端的命令文本。
+ * - auto 参数：先 export VAR=$(...) 为环境变量，echo 表格展示，最后用 $VAR 执行
+ * - 普通参数：直接替换值
+ * - 转义 \{...\} 还原为字面量 {...}
+ */
+function buildTerminalCommand(
+    command: string,
+    params: Record<string, string>,
+    paramDefs: Record<string, Parameter>
+): string {
+    const autoParams: Array<{ name: string; cmd: string }> = [];
+    let finalCmd = command;
+
     for (const [key, value] of Object.entries(params)) {
-        result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
+        const def = paramDefs[key];
+        if (def && def.type === 'auto') {
+            // auto 参数：用环境变量 $__AUTO_xxx 替换
+            const varName = `__AUTO_${key}`;
+            autoParams.push({ name: varName, cmd: value });
+            finalCmd = finalCmd.replace(new RegExp(`(?<!\\\\)\\{${key}\\}`, 'g'), `$${varName}`);
+        } else {
+            // 普通参数：直接替换值
+            finalCmd = finalCmd.replace(new RegExp(`(?<!\\\\)\\{${key}\\}`, 'g'), value);
+        }
     }
-    return result;
+
+    // 还原转义的 \{...\} 为字面量 {...}
+    finalCmd = finalCmd.replace(/\\\{/g, '{').replace(/\\\}/g, '}');
+
+    // 构建完整命令
+    const lines: string[] = [];
+
+    if (autoParams.length > 0) {
+        // export 每个 auto 参数
+        for (const ap of autoParams) {
+            lines.push(`export ${ap.name}=$(${ap.cmd})`);
+        }
+        // echo 参数名和值
+        for (const ap of autoParams) {
+            const displayName = ap.name.replace('__AUTO_', '');
+            lines.push(`echo "${displayName}: ${ap.name}=$${ap.name}"`);
+        }
+    }
+
+    lines.push(finalCmd);
+    return lines.join(' && ');
 }
 
 function getOrCreateTerminal(name: string = 'Command Manager'): vscode.Terminal {
@@ -287,8 +353,14 @@ export function registerCommandManagerView(context: vscode.ExtensionContext): vs
                     return;
                 }
 
-                // Replace parameters in command
-                const finalCmd = replaceParameters(cmdItem.command, params);
+                // 合并参数定义
+                const paramDefs: Record<string, Parameter> = {
+                    ...(cmdItem.categoryData.parameters || {}),
+                    ...(cmdItem.parameters || {}),
+                };
+
+                // 构建终端命令
+                const finalCmd = buildTerminalCommand(cmdItem.command, params, paramDefs);
 
                 // Get or create terminal and execute command
                 const terminal = getOrCreateTerminal('Command Manager');

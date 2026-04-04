@@ -3,6 +3,10 @@
 一个 VS Code 插件，一键配置 PyCharm 风格的开发环境：Darcula 主题、JetBrains Mono 字体、文件树优化、快捷键绑定、文件引用复制等。
 测试环境：ubuntu20.04 22.04
 
+## 演示
+
+![Demo](other_files/demo.gif)
+
 ## 安装
 
 ```bash

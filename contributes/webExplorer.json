@@ -1,0 +1,52 @@
+{
+  "commands": [
+    {
+      "command": "user_extension.addBookmark",
+      "title": "Add Bookmark",
+      "icon": "$(add)"
+    },
+    {
+      "command": "user_extension.removeBookmark",
+      "title": "Remove Bookmark",
+      "icon": "$(trash)"
+    },
+    {
+      "command": "user_extension.openBookmark",
+      "title": "Open Bookmark"
+    },
+    {
+      "command": "user_extension.refreshWeb",
+      "title": "Refresh Web Explorer",
+      "icon": "$(refresh)"
+    }
+  ],
+  "views": {
+    "user_extension": [
+      {
+        "id": "user_extension_web",
+        "name": "Explorer"
+      }
+    ]
+  },
+  "menus": {
+    "view/title": [
+      {
+        "command": "user_extension.addBookmark",
+        "when": "view == user_extension_web",
+        "group": "navigation"
+      },
+      {
+        "command": "user_extension.refreshWeb",
+        "when": "view == user_extension_web",
+        "group": "navigation"
+      }
+    ],
+    "view/item/context": [
+      {
+        "command": "user_extension.removeBookmark",
+        "when": "view == user_extension_web && viewItem == bookmarkItem",
+        "group": "inline"
+      }
+    ]
+  }
+}

@@ -8,7 +8,7 @@ export interface ExtConfig {
 }
 
 export function loadConfig(extensionPath: string): ExtConfig {
-    const configPath = path.join(extensionPath, 'config.json');
+    const configPath = path.join(extensionPath, 'src', 'config.json');
     const raw = fs.readFileSync(configPath, 'utf8');
     return JSON.parse(raw);
 }

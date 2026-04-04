@@ -1,0 +1,30 @@
+{
+  "commands": [
+    {
+      "command": "user_extension.connectSsh",
+      "title": "Connect to SSH Host"
+    },
+    {
+      "command": "user_extension.refreshSsh",
+      "title": "Refresh SSH Hosts",
+      "icon": "$(refresh)"
+    }
+  ],
+  "views": {
+    "user_extension": [
+      {
+        "id": "user_extension_ssh",
+        "name": "SSH Servers"
+      }
+    ]
+  },
+  "menus": {
+    "view/title": [
+      {
+        "command": "user_extension.refreshSsh",
+        "when": "view == user_extension_ssh",
+        "group": "navigation"
+      }
+    ]
+  }
+}

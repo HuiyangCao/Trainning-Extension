@@ -1,4 +1,7 @@
 src/
+!src/config.json
 other_files/tsconfig.json
 .gitignore
 node_modules/
+contributes/
+scripts/

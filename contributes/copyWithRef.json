@@ -1,0 +1,61 @@
+{
+  "commands": [
+    {
+      "command": "user_extension.copy",
+      "title": "Copy with File Reference"
+    },
+    {
+      "command": "user_extension.copyFilesToSystem",
+      "title": "Copy to System Clipboard"
+    },
+    {
+      "command": "user_extension.copyFileName",
+      "title": "Copy File Name"
+    },
+    {
+      "command": "user_extension.revealFolderInExplorer",
+      "title": "Reveal Folder in Explorer"
+    },
+    {
+      "command": "user_extension.killPythonDebug",
+      "title": "Kill All Python Debug",
+      "icon": "$(close)"
+    },
+    {
+      "command": "user_extension.addFavoriteFolder",
+      "title": "Add to Favorite Folders"
+    }
+  ],
+  "menus": {
+    "debug/toolBar": [
+      {
+        "command": "user_extension.killPythonDebug",
+        "when": "inDebugMode"
+      }
+    ],
+    "editor/context": [
+      {
+        "command": "user_extension.copy",
+        "group": "9_cutcopypaste",
+        "when": "editorTextFocus"
+      }
+    ],
+    "explorer/context": [
+      {
+        "command": "user_extension.copyFilesToSystem",
+        "group": "5_cutcopypaste",
+        "when": "!explorerResourceIsRoot"
+      },
+      {
+        "command": "user_extension.copyFileName",
+        "group": "5_cutcopypaste",
+        "when": "!explorerResourceIsRoot"
+      },
+      {
+        "command": "user_extension.addFavoriteFolder",
+        "group": "navigation",
+        "when": "explorerResourceIsFolder"
+      }
+    ]
+  }
+}
