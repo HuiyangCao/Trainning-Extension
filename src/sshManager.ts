@@ -90,6 +90,28 @@ function getRemotePath(serverNode: SshHostNode, remotePath: string): string {
     return `${user}${host}:${remotePath}`;
 }
 
+/**
+ * 检测远程路径是否为文件夹
+ */
+async function isRemoteDirectory(serverNode: SshHostNode, remotePath: string): Promise<boolean> {
+    const sshArgs = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5'];
+    if (serverNode.port) {
+        sshArgs.push('-p', serverNode.port);
+    }
+    const user = serverNode.user ? `${serverNode.user}@` : '';
+    const host = serverNode.hostname || serverNode.host;
+
+    return new Promise((resolve) => {
+        const proc = spawn('ssh', [...sshArgs, `${user}${host}`, `test -d "${remotePath}" && echo 1 || echo 0`], { timeout: 5000 });
+        let output = '';
+        proc.stdout.on('data', (d) => { output += d.toString(); });
+        proc.on('close', (code) => {
+            resolve(output.trim() === '1');
+        });
+        proc.on('error', () => resolve(false));
+    });
+}
+
 function buildScpArgs(serverNode: SshHostNode): string[] {
     const args: string[] = [];
     if (serverNode.port) {
@@ -381,7 +403,6 @@ function showHistoryQuickPick(
             ? `$(history) ${e.isDirectory ? '$(folder)' : '$(file)'} ${e.local} → ${e.remote}`
             : `$(history) ${e.isDirectory ? '$(folder)' : '$(file)'} ${e.remote} → ${e.local}`,
         description: `Last used: ${new Date(e.lastUsed).toLocaleDateString()}`,
-        detail: e.isDirectory ? 'Directory' : 'File',
         entry: e,
     }));
 
@@ -549,18 +570,27 @@ async function scpUpload(
 ): Promise<void> {
     const user = serverNode.user ? `${serverNode.user}@` : '';
     const host = serverNode.hostname || serverNode.host;
-    const remoteTarget = path.posix.join(remoteDir, path.basename(localPath));
-    const remoteFull = `${user}${host}:${remoteTarget}`;
-
     const isDir = fs.statSync(localPath).isDirectory();
-    const src = isDir ? `${localPath}/` : localPath;
-    const dst = isDir ? `${remoteFull}/` : remoteFull;
 
     let sshOpts = '-e "ssh';
     if (serverNode.port) {
         sshOpts += ` -p ${serverNode.port}`;
     }
     sshOpts += '"';
+
+    let src: string;
+    let dst: string;
+    
+    if (isDir) {
+        // 文件夹：目标端无脑加上源文件夹名
+        const localFolderName = path.basename(localPath);
+        src = `${localPath}/`;
+        dst = `${user}${host}:${remoteDir}/${localFolderName}/`;
+    } else {
+        // 文件：源端不加 /，目标端是目录不加文件名
+        src = localPath;
+        dst = `${user}${host}:${remoteDir}`;
+    }
 
     const cmd = `rsync -avz --progress --delete ${sshOpts} "${src}" "${dst}"`;
 
@@ -585,7 +615,6 @@ async function scpDownload(
     const user = serverNode.user ? `${serverNode.user}@` : '';
     const host = serverNode.hostname || serverNode.host;
     const remoteFull = `${user}${host}:${remotePath}`;
-    const localTarget = path.join(localDir, path.basename(remotePath));
 
     let sshOpts = '-e "ssh';
     if (serverNode.port) {
@@ -593,9 +622,21 @@ async function scpDownload(
     }
     sshOpts += '"';
 
-    const isDir = remotePath.endsWith('/');
-    const src = isDir ? `${remoteFull}/` : remoteFull;
-    const dst = isDir ? `${localTarget}/` : localTarget;
+    // 检测远程路径是文件还是文件夹
+    const isDir = await isRemoteDirectory(serverNode, remotePath);
+    
+    let src: string;
+    let dst: string;
+    
+    if (isDir) {
+        // 文件夹：目标端无脑加上源文件夹名
+        const remoteFolderName = path.posix.basename(remotePath);
+        src = `${remoteFull}/`;
+        dst = `${localDir}/${remoteFolderName}/`;
+    } else {
+        src = remoteFull;
+        dst = localDir;
+    }
 
     const cmd = `rsync -avz --progress --delete ${sshOpts} "${src}" "${dst}"`;
 
@@ -605,8 +646,8 @@ async function scpDownload(
     terminal.show(true);
     terminal.sendText(cmd, true);
 
-    addSyncHistory(serverNode.host, 'download', localDir, remotePath, true);
-    vscode.window.showInformationMessage(`Downloading: ${path.basename(remotePath)}`);
+    addSyncHistory(serverNode.host, 'download', localDir, remotePath, isDir);
+    vscode.window.showInformationMessage(`Downloading ${isDir ? 'folder' : 'file'}: ${path.basename(remotePath)}`);
 }
 
 /**
