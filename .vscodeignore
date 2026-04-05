@@ -5,3 +5,7 @@ other_files/tsconfig.json
 node_modules/
 contributes/
 scripts/
+.venv/
+.vscode/
+doc/
+JetBrainsMono-2.304/

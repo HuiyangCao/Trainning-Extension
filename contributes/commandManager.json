@@ -13,6 +13,11 @@
       "command": "user_extension.refreshCommands",
       "title": "Refresh Commands",
       "icon": "$(refresh)"
+    },
+    {
+      "command": "user_extension.newCommandConfig",
+      "title": "New Command Config",
+      "icon": "$(add)"
     }
   ],
   "viewsContainers": {
@@ -34,6 +39,11 @@
   },
   "menus": {
     "view/title": [
+      {
+        "command": "user_extension.newCommandConfig",
+        "when": "view == user_extension_commands",
+        "group": "navigation"
+      },
       {
         "command": "user_extension.refreshCommands",
         "when": "view == user_extension_commands",

@@ -378,6 +378,74 @@ export function registerCommandManagerView(context: vscode.ExtensionContext): vs
     });
     disposables.push(refreshDisposable);
 
+    // Register newCommandConfig
+    const newConfigDisposable = vscode.commands.registerCommand(
+        `${EXTENSION_ID}.newCommandConfig`,
+        async () => {
+            try {
+                const configDir = path.join(
+                    process.env.HOME || '',
+                    '.config',
+                    'user_extension',
+                    'command_config'
+                );
+
+                if (!fs.existsSync(configDir)) {
+                    fs.mkdirSync(configDir, { recursive: true });
+                }
+
+                const name = await vscode.window.showInputBox({
+                    prompt: 'Enter command config name',
+                    placeHolder: 'e.g., deploy, build, test',
+                    ignoreFocusOut: true,
+                    validateInput: (value: string) => {
+                        if (!value || value.trim().length === 0) {
+                            return 'Name cannot be empty';
+                        }
+                        if (value.startsWith('_')) {
+                            return 'Name cannot start with underscore';
+                        }
+                        if (!/^[a-zA-Z0-9_-]+$/.test(value)) {
+                            return 'Name can only contain letters, numbers, hyphens, and underscores';
+                        }
+                        const filePath = path.join(configDir, `${value}.json`);
+                        if (fs.existsSync(filePath)) {
+                            return `Config '${value}' already exists`;
+                        }
+                        return null;
+                    },
+                });
+
+                if (!name) {
+                    return;
+                }
+
+                const template = {
+                    parameters: {},
+                    commands: [
+                        {
+                            name: 'Example Command',
+                            command: 'echo "Hello from ' + name + '"',
+                        },
+                    ],
+                };
+
+                const filePath = path.join(configDir, `${name}.json`);
+                fs.writeFileSync(filePath, JSON.stringify(template, null, 2) + '\n', 'utf-8');
+
+                provider.refresh();
+
+                const doc = await vscode.workspace.openTextDocument(filePath);
+                await vscode.window.showTextDocument(doc);
+
+                vscode.window.showInformationMessage(`Created command config: ${name}.json`);
+            } catch (e) {
+                vscode.window.showErrorMessage(`Failed to create command config: ${e}`);
+            }
+        }
+    );
+    disposables.push(newConfigDisposable);
+
     // Add provider disposal
     disposables.push(new vscode.Disposable(() => provider.dispose()));
 

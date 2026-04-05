@@ -8,6 +8,14 @@
   },
   "commands": [
     {
+      "name": "NVIDIA SMI",
+      "command": "nvidia-smi"
+    },
+    {
+      "name": "SHA256 Checksum (Recursive)",
+      "command": "find . -type f -print0 | xargs -0 -P\"$(nproc)\" -n1 sha256sum | LC_ALL=C sort --parallel=\"$(nproc)\" -S 25% | sha256sum"
+    },
+    {
       "name": "示例命令 1",
       "command": "echo '这是一个示例命令'"
     },
