@@ -15,6 +15,15 @@
       "icon": "$(refresh)"
     }
   ],
+  "viewsContainers": {
+    "activitybar": [
+      {
+        "id": "user_extension",
+        "title": "User Extension",
+        "icon": "other_files/锤子.svg"
+      }
+    ]
+  },
   "views": {
     "user_extension": [
       {
