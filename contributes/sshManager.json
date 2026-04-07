@@ -29,6 +29,11 @@
       "command": "user_extension.copySshIp",
       "title": "Copy SSH Host/IP",
       "icon": "$(copy)"
+    },
+    {
+      "command": "user_extension.setSshStartCommand",
+      "title": "Set SSH Startup Command",
+      "icon": "$(gear)"
     }
   ],
   "views": {
@@ -60,11 +65,6 @@
         "command": "user_extension.syncDownload",
         "when": "view == user_extension_ssh && viewItem == sshHost",
         "group": "inline@3"
-      },
-      {
-        "command": "user_extension.copySshIp",
-        "when": "view == user_extension_ssh && viewItem == sshHost",
-        "group": "inline@5"
       }
     ],
     "view/item/context": [
@@ -86,7 +86,12 @@
       {
         "command": "user_extension.copySshIp",
         "when": "view == user_extension_ssh && viewItem == sshHost",
-        "group": "inline@7"
+        "group": "navigation@1"
+      },
+      {
+        "command": "user_extension.setSshStartCommand",
+        "when": "view == user_extension_ssh && viewItem == sshHost",
+        "group": "navigation@2"
       }
     ]
   }

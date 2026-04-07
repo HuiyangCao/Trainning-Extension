@@ -103,6 +103,11 @@
         "icon": "$(copy)"
       },
       {
+        "command": "user_extension.setSshStartCommand",
+        "title": "Set SSH Startup Command",
+        "icon": "$(gear)"
+      },
+      {
         "command": "user_extension.addBookmark",
         "title": "Add Bookmark",
         "icon": "$(add)"
@@ -181,11 +186,6 @@
           "group": "inline@3"
         },
         {
-          "command": "user_extension.copySshIp",
-          "when": "view == user_extension_ssh && viewItem == sshHost",
-          "group": "inline@5"
-        },
-        {
           "command": "user_extension.addBookmark",
           "when": "view == user_extension_web",
           "group": "navigation"
@@ -220,7 +220,12 @@
         {
           "command": "user_extension.copySshIp",
           "when": "view == user_extension_ssh && viewItem == sshHost",
-          "group": "inline@7"
+          "group": "navigation@1"
+        },
+        {
+          "command": "user_extension.setSshStartCommand",
+          "when": "view == user_extension_ssh && viewItem == sshHost",
+          "group": "navigation@2"
         },
         {
           "command": "user_extension.removeBookmark",

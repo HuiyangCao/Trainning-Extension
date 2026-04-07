@@ -38,12 +38,94 @@ interface SyncConfig {
     remoteFolderHistory?: Record<string, string[]>;
 }
 
+interface StartCommandConfig {
+    _comment?: string | string[];
+    servers: Record<string, {
+        projects: Record<string, string>;
+    }>;
+}
+
 type SshTreeNode = SshHostNode | SshErrorNode;
 
 const SYNC_CONFIG_DIR = path.join(os.homedir(), '.config', 'user_extension', 'ssh_manager');
 const SYNC_CONFIG_PATH = path.join(SYNC_CONFIG_DIR, 'config.json');
+const START_COMMAND_CONFIG_PATH = path.join(os.homedir(), '.config', 'user_extension', 'start_command.json');
 const MAX_HISTORY = 5;
 const MAX_FOLDER_HISTORY = 5;
+
+function getCurrentProjectName(): string {
+    const ws = vscode.workspace.workspaceFolders?.[0];
+    if (!ws) {
+        return '__default__';
+    }
+    return ws.name || path.basename(ws.uri.fsPath) || '__default__';
+}
+
+function loadStartCommandConfig(): StartCommandConfig {
+    if (!fs.existsSync(START_COMMAND_CONFIG_PATH)) {
+        return {
+            _comment: [
+                'How to use start_command.json:',
+                '1) servers.<ssh-host-alias>.projects.<workspace-name> = "<command>"',
+                '2) <ssh-host-alias> must match Host in ~/.ssh/config',
+                '3) <workspace-name> is current VS Code workspace folder name',
+                '4) Example:',
+                '   servers.my-server.projects.vscode-copy-with-ref = "cd ~/proj && source .venv/bin/activate"',
+                '5) Fallback project key: "__default__"',
+            ].join('\n'),
+            servers: {},
+        };
+    }
+    try {
+        const raw = JSON.parse(fs.readFileSync(START_COMMAND_CONFIG_PATH, 'utf-8')) as StartCommandConfig;
+        if (typeof raw._comment === 'string') {
+            raw._comment = raw._comment.split('\n');
+        }
+        raw.servers = raw.servers || {};
+        for (const key of Object.keys(raw.servers)) {
+            raw.servers[key].projects = raw.servers[key].projects || {};
+        }
+        return raw;
+    } catch {
+        return { servers: {} };
+    }
+}
+
+function saveStartCommandConfig(config: StartCommandConfig): void {
+    const dir = path.dirname(START_COMMAND_CONFIG_PATH);
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(START_COMMAND_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
+}
+
+function ensureStartCommandTemplate(server: string, projectName: string): StartCommandConfig {
+    const config = loadStartCommandConfig();
+    if (!config._comment) {
+        config._comment = [
+            'How to use start_command.json:',
+            '1) servers.<ssh-host-alias>.projects.<workspace-name> = "<command>"',
+            '2) <ssh-host-alias> must match Host in ~/.ssh/config',
+            '3) <workspace-name> is current VS Code workspace folder name',
+            '4) Example:',
+            '   servers.my-server.projects.vscode-copy-with-ref = "cd ~/proj && source .venv/bin/activate"',
+            '5) Fallback project key: "__default__"',
+        ];
+    }
+    if (!config.servers[server]) {
+        config.servers[server] = { projects: {} };
+    }
+    if (!config.servers[server].projects[projectName]) {
+        config.servers[server].projects[projectName] = 'ls';
+    }
+    saveStartCommandConfig(config);
+    return config;
+}
+
+function getStartCommand(server: string, projectName: string): string | undefined {
+    const config = loadStartCommandConfig();
+    return config.servers[server]?.projects?.[projectName];
+}
 
 function loadSyncConfig(): SyncConfig {
     if (!fs.existsSync(SYNC_CONFIG_PATH)) {
@@ -425,6 +507,7 @@ class SshServerProvider implements vscode.TreeDataProvider<SshTreeNode> {
         } else if (element.latency === null) {
             parts.push('Latency: unreachable');
         }
+        parts.push('Right click for more actions');
         return parts.join('\n');
     }
 }
@@ -456,6 +539,12 @@ async function connectSsh(node: SshTreeNode) {
 
     terminal.show(true);
     terminal.sendText(sshCommand, true);
+
+    const projectName = getCurrentProjectName();
+    const startupCommand = getStartCommand(node.host, projectName);
+    if (startupCommand && startupCommand.trim()) {
+        setTimeout(() => terminal.sendText(startupCommand, true), 600);
+    }
 }
 
 async function copySshIp(node: SshTreeNode) {
@@ -465,6 +554,18 @@ async function copySshIp(node: SshTreeNode) {
     const host = getSshHostAddress(node);
     await vscode.env.clipboard.writeText(host);
     vscode.window.showInformationMessage(`Copied host: ${host}`);
+}
+
+async function openSshStartCommandConfig(node: SshTreeNode) {
+    if (!node || node.kind !== 'host') {
+        return;
+    }
+    const projectName = getCurrentProjectName();
+    ensureStartCommandTemplate(node.host, projectName);
+    const uri = vscode.Uri.file(START_COMMAND_CONFIG_PATH);
+    const doc = await vscode.workspace.openTextDocument(uri);
+    await vscode.window.showTextDocument(doc);
+    vscode.window.showInformationMessage(`Template ensured: server "${node.host}", project "${projectName}"`);
 }
 
 interface HistoryQuickPickItem extends vscode.QuickPickItem {
@@ -1142,10 +1243,11 @@ export function registerSshServerView(context: vscode.ExtensionContext): vscode.
     const uploadCmd = vscode.commands.registerCommand(`${EXTENSION_ID}.syncUpload`, syncUpload);
     const downloadCmd = vscode.commands.registerCommand(`${EXTENSION_ID}.syncDownload`, syncDownload);
     const copyIpCmd = vscode.commands.registerCommand(`${EXTENSION_ID}.copySshIp`, copySshIp);
+    const setStartCmd = vscode.commands.registerCommand(`${EXTENSION_ID}.setSshStartCommand`, openSshStartCommandConfig);
 
     const providerDisposable = vscode.Disposable.from(
         new vscode.Disposable(() => provider.dispose())
     );
 
-    return [treeView, connectCmd, openConfigCmd, refreshCmd, uploadCmd, downloadCmd, copyIpCmd, providerDisposable];
+    return [treeView, connectCmd, openConfigCmd, refreshCmd, uploadCmd, downloadCmd, copyIpCmd, setStartCmd, providerDisposable];
 }
