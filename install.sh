@@ -143,19 +143,6 @@ if [ ! -d node_modules ]; then
 else
     success "node_modules 已就绪"
 fi
-
-# Python (for icon generation)
-if ! command -v python3 &>/dev/null; then
-    warn "未检测到 python3，跳过图标生成"
-else
-    if confirm "使用 Python 生成扩展图标" "python3 gen_icon.py"; then
-        python3 other_files/gen_icon.py
-        success "图标已生成"
-    else
-        warn "跳过图标生成"
-    fi
-fi
-
 # 命令配置模板（安装到用户配置目录）
 COMMAND_CONFIG_DIR="$HOME/.config/trainning_extension/command_config"
 TEMPLATE_CONFIG="$(pwd)/other_files/template_commands.json"
