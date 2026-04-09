@@ -73,6 +73,10 @@
         "title": "Add to Favorite Folders"
       },
       {
+        "command": "user_extension.deleteModelFiles",
+        "title": "Delete Model Files (整理 Logs / model_*.pt)"
+      },
+      {
         "command": "user_extension.connectSsh",
         "title": "Open terminal",
         "icon": "$(terminal)"
@@ -261,8 +265,30 @@
           "command": "user_extension.addFavoriteFolder",
           "group": "navigation",
           "when": "explorerResourceIsFolder"
+        },
+        {
+          "command": "user_extension.deleteModelFiles",
+          "group": "navigation",
+          "when": "explorerResourceIsFolder"
         }
       ]
+    },
+    "configuration": {
+      "title": "User Extension",
+      "properties": {
+        "user_extension.deleteModelFilesFolderPurgePtLimit": {
+          "type": "number",
+          "default": 8,
+          "minimum": 1,
+          "markdownDescription": "步骤 1：直接子文件夹内 `.pt` 文件数 **严格小于** 该值时，才可能被整夹删除（还需满足 model 编号条件）。"
+        },
+        "user_extension.deleteModelFilesFolderPurgeModelMax": {
+          "type": "number",
+          "default": 4000,
+          "minimum": 0,
+          "markdownDescription": "步骤 1：上述子文件夹内所有 `model_*.pt` 的编号必须 **严格小于** 该值，才会被整夹删除；任一号 ≥ 该值则保留该文件夹。"
+        }
+      }
     }
   },
   "scripts": {
@@ -277,6 +303,8 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "opencode-superlocalmemory": "^0.1.2"
+    "@supermemory/tools": "^1.4.1",
+    "opencode-superlocalmemory": "^0.1.2",
+    "supermemory": "^4.21.1"
   }
 }

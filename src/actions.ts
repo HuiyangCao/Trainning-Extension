@@ -149,6 +149,142 @@ export function registerCopyFileNameCommand() {
     );
 }
 
+function runDeleteModelFilesScript(
+    pythonBin: string,
+    scriptPath: string,
+    folderPath: string,
+    channel: vscode.OutputChannel,
+    opts: { ptLimit: number; modelMaxExclusive: number }
+): Promise<number> {
+    return new Promise((resolve) => {
+        const proc = spawn(pythonBin, [
+            scriptPath,
+            '--path',
+            folderPath,
+            '--yes',
+            '--folder-purge-pt-limit',
+            String(opts.ptLimit),
+            '--folder-purge-model-max',
+            String(opts.modelMaxExclusive),
+        ], {
+            env: process.env,
+        });
+        proc.stdout.on('data', (data: Buffer) => {
+            channel.append(data.toString());
+        });
+        proc.stderr.on('data', (data: Buffer) => {
+            channel.append(data.toString());
+        });
+        proc.on('error', (err) => {
+            channel.appendLine(String(err));
+            resolve(1);
+        });
+        proc.on('close', (code) => {
+            resolve(code ?? 1);
+        });
+    });
+}
+
+export function registerDeleteModelFilesCommand(context: vscode.ExtensionContext) {
+    const channel = vscode.window.createOutputChannel('delete_model_files');
+    context.subscriptions.push(channel);
+
+    return vscode.commands.registerCommand(
+        `${EXTENSION_ID}.deleteModelFiles`,
+        async (uri: vscode.Uri, uris?: vscode.Uri[]) => {
+            let targets: vscode.Uri[] = [];
+            if (uris && uris.length > 0) {
+                targets = uris;
+            } else if (uri) {
+                targets = [uri];
+            } else {
+                const picked = await vscode.window.showOpenDialog({
+                    canSelectFolders: true,
+                    canSelectFiles: false,
+                    canSelectMany: true,
+                    openLabel: '选择要整理的文件夹',
+                });
+                if (!picked?.length) {
+                    return;
+                }
+                targets = picked;
+            }
+
+            const folders = targets.filter((u) => {
+                try {
+                    return fs.statSync(u.fsPath).isDirectory();
+                } catch {
+                    return false;
+                }
+            });
+            if (!folders.length) {
+                vscode.window.showWarningMessage('delete_model_files：请选择文件夹。');
+                return;
+            }
+
+            const scriptPath = path.join(context.extensionPath, 'other_files', 'delete_model_files.py');
+            if (!fs.existsSync(scriptPath)) {
+                vscode.window.showErrorMessage(`未找到脚本: ${scriptPath}`);
+                return;
+            }
+
+            const cfg = vscode.workspace.getConfiguration('user_extension');
+            const pythonBin = cfg.get<string>('deleteModelFilesPython', 'python3');
+            let ptLimit = cfg.get<number>('deleteModelFilesFolderPurgePtLimit', 8);
+            let modelMaxExclusive = cfg.get<number>('deleteModelFilesFolderPurgeModelMax', 5000);
+            if (!Number.isFinite(ptLimit) || ptLimit < 1) {
+                vscode.window.showWarningMessage('deleteModelFilesFolderPurgePtLimit 无效，已改用 8。');
+                ptLimit = 8;
+            } else {
+                ptLimit = Math.floor(ptLimit);
+            }
+            if (!Number.isFinite(modelMaxExclusive) || modelMaxExclusive < 0) {
+                vscode.window.showWarningMessage('deleteModelFilesFolderPurgeModelMax 无效，已改用 5000。');
+                modelMaxExclusive = 5000;
+            } else {
+                modelMaxExclusive = Math.floor(modelMaxExclusive);
+            }
+
+            const preview = folders.map((f) => f.fsPath).join('\n');
+            const pick = await vscode.window.showWarningMessage(
+                `delete_model_files 将在 ${folders.length} 个目录下执行：删除「少于 ${ptLimit} 个 .pt 且 model 编号均 <${modelMaxExclusive}」的直接子文件夹，并把各目录中 model_*.pt 裁减为保留编号最大的 2 个。操作不可撤销。\n\n${preview}`,
+                { modal: true },
+                '确定执行',
+                '取消'
+            );
+            if (pick !== '确定执行') {
+                return;
+            }
+
+            channel.clear();
+            channel.show(true);
+            channel.appendLine(`脚本: ${scriptPath}`);
+            channel.appendLine(`Python: ${pythonBin}`);
+            channel.appendLine(`folder-purge-pt-limit: ${ptLimit}`);
+            channel.appendLine(`folder-purge-model-max: ${modelMaxExclusive}`);
+
+            let hadError = false;
+            for (const folderUri of folders) {
+                const fp = folderUri.fsPath;
+                channel.appendLine(`\n${'='.repeat(60)}\n>>> ${fp}\n${'='.repeat(60)}`);
+                const code = await runDeleteModelFilesScript(pythonBin, scriptPath, fp, channel, {
+                    ptLimit,
+                    modelMaxExclusive,
+                });
+                if (code !== 0) {
+                    hadError = true;
+                }
+            }
+
+            if (hadError) {
+                vscode.window.showWarningMessage('delete_model_files 已结束，部分步骤返回非零退出码，请查看输出面板。');
+            } else {
+                vscode.window.showInformationMessage('delete_model_files 已完成。');
+            }
+        }
+    );
+}
+
 export function registerKillPythonDebugCommand() {
     return vscode.commands.registerCommand(`${EXTENSION_ID}.killPythonDebug`, () => {
         const proc = spawn('sudo', ['pkill', '-9', '-f', 'python.*debug'], { stdio: 'ignore' });

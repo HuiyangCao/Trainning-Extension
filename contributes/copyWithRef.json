@@ -24,6 +24,10 @@
     {
       "command": "user_extension.addFavoriteFolder",
       "title": "Add to Favorite Folders"
+    },
+    {
+      "command": "user_extension.deleteModelFiles",
+      "title": "Delete Model Files (整理 Logs / model_*.pt)"
     }
   ],
   "menus": {
@@ -53,6 +57,11 @@
       },
       {
         "command": "user_extension.addFavoriteFolder",
+        "group": "navigation",
+        "when": "explorerResourceIsFolder"
+      },
+      {
+        "command": "user_extension.deleteModelFiles",
         "group": "navigation",
         "when": "explorerResourceIsFolder"
       }

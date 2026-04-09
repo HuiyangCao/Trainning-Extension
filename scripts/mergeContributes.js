@@ -31,6 +31,9 @@ function mergeContributes() {
     // Read all JSON files from contributes directory
     const files = fs.readdirSync(CONTRIBUTES_DIR).filter(f => f.endsWith('.json'));
 
+    let configurationTitle = 'User Extension';
+    const configurationProperties = {};
+
     for (const file of files) {
         const filePath = path.join(CONTRIBUTES_DIR, file);
         const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
@@ -74,6 +77,25 @@ function mergeContributes() {
         if (data.keybindings) {
             pkg.contributes.keybindings.push(...data.keybindings);
         }
+
+        // Merge configuration.properties
+        if (data.configuration) {
+            if (data.configuration.title) {
+                configurationTitle = data.configuration.title;
+            }
+            if (data.configuration.properties) {
+                Object.assign(configurationProperties, data.configuration.properties);
+            }
+        }
+    }
+
+    if (Object.keys(configurationProperties).length > 0) {
+        pkg.contributes.configuration = {
+            title: configurationTitle,
+            properties: configurationProperties,
+        };
+    } else {
+        delete pkg.contributes.configuration;
     }
 
     // Deduplicate all arrays

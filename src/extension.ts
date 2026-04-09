@@ -6,6 +6,7 @@ import {
     registerAddFavoriteFolderCommand,
     registerRevealFolderCommand,
     registerCopyFileNameCommand,
+    registerDeleteModelFilesCommand,
     registerKillPythonDebugCommand,
 } from './actions';
 import { registerDebugConfigurationProviderAndCommand } from './debug';
@@ -23,13 +24,14 @@ export function activate(context: vscode.ExtensionContext) {
     const addFavoriteFolderCmd = registerAddFavoriteFolderCommand(context);
     const revealFolderCmd = registerRevealFolderCommand(context);
     const copyFileNameCmd = registerCopyFileNameCommand();
+    const deleteModelFilesCmd = registerDeleteModelFilesCommand(context);
     const killPythonDebugCmd = registerKillPythonDebugCommand();
     const debugProvider = registerDebugConfigurationProviderAndCommand(context);
     const cmdMgrDisposables = registerCommandManagerView(context);
     const sshDisposables = registerSshServerView(context);
     const webDisposables = registerWebExplorerView(context);
 
-    context.subscriptions.push(cmd, copyFilesCmd, addFavoriteFolderCmd, revealFolderCmd, copyFileNameCmd, killPythonDebugCmd, debugProvider, ...cmdMgrDisposables, ...sshDisposables, ...webDisposables);
+    context.subscriptions.push(cmd, copyFilesCmd, addFavoriteFolderCmd, revealFolderCmd, copyFileNameCmd, deleteModelFilesCmd, killPythonDebugCmd, debugProvider, ...cmdMgrDisposables, ...sshDisposables, ...webDisposables);
 }
 
 export function deactivate() {}
