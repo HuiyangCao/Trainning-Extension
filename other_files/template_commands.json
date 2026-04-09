@@ -1,9 +1,9 @@
 {
   "parameters": {
-    "example_param": {
+    "gpu_ids": {
       "type": "select",
-      "prompt": "请选择一个选项",
-      "options": ["选项1", "选项2", "选项3"]
+      "prompt": "请选择一个 GPU",
+      "options": ["0", "1", "2", "3"]
     }
   },
   "commands": [
@@ -16,16 +16,16 @@
       "command": "find . -type f -print0 | xargs -0 -P\"$(nproc)\" -n1 sha256sum | LC_ALL=C sort --parallel=\"$(nproc)\" -S 25% | sha256sum"
     },
     {
-      "name": "示例命令 1",
-      "command": "echo '这是一个示例命令'"
+      "name": "task",
+      "command": "CUDA_VISIBLE_DEVICES={gpu_ids} uv run train task --env.scene.num-envs 4096"
     },
     {
-      "name": "示例命令 2 (带参数)",
-      "command": "echo '你选择了: {example_param}'"
+      "name": "本地到mjlab服务器",
+      "command": "rsync -avz --delete --exclude='build/' --exclude='devel/'  --exclude='.venv/' --exclude='logs/' --exclude='wandb/' /home/user/mjlab/ ssh_server:/home/user/mjlab/ "
     },
     {
-      "name": "示例命令 3",
-      "command": "echo '新增命令配置会复制这个模板'"
+      "name": "mjlab服务器logs到本地",
+      "command": "rsync -avz --progress --delete ssh_user@ssh_server:/home/user/mjlab/logs/ /home/user/mjlab/logs/"
     }
   ]
 }
