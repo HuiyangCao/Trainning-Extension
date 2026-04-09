@@ -22,6 +22,10 @@
     {
       "name": "示例命令 2 (带参数)",
       "command": "echo '你选择了: {example_param}'"
+    },
+    {
+      "name": "示例命令 3",
+      "command": "echo '新增命令配置会复制这个模板'"
     }
   ]
 }

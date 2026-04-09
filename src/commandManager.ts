@@ -265,17 +265,8 @@ function buildTerminalCommand(
     return finalCmd;
 }
 
-function getOrCreateTerminal(name: string = 'Command Manager'): vscode.Terminal {
-    // 优先使用活跃终端，其次查找同名终端，最后创建新终端
-    let terminal = vscode.window.activeTerminal;
-    if (!terminal) {
-        const existing = vscode.window.terminals.find(t => t.name === name);
-        if (existing) {
-            return existing;
-        }
-        terminal = vscode.window.createTerminal(name);
-    }
-    return terminal;
+function createRunTerminal(name: string): vscode.Terminal {
+    return vscode.window.createTerminal({ name });
 }
 
 export function registerCommandManagerView(context: vscode.ExtensionContext): vscode.Disposable[] {
@@ -326,8 +317,7 @@ export function registerCommandManagerView(context: vscode.ExtensionContext): vs
                 // 构建终端命令
                 const finalCmd = buildTerminalCommand(cmdItem.command, params, paramDefs);
 
-                // Get or create terminal and execute command
-                const terminal = getOrCreateTerminal('Command Manager');
+                const terminal = createRunTerminal(cmdItem.name?.trim() || 'Command Manager');
                 terminal.show(true);
                 terminal.sendText(finalCmd, true);
             } catch (e) {
@@ -420,18 +410,36 @@ export function registerCommandManagerView(context: vscode.ExtensionContext): vs
                     return;
                 }
 
-                const template = {
-                    parameters: {},
-                    commands: [
-                        {
-                            name: 'Example Command',
-                            command: 'echo "Hello from ' + name + '"',
-                        },
-                    ],
-                };
+                const templatePath = path.join(
+                    context.extensionPath,
+                    'other_files',
+                    'template_commands.json'
+                );
+                const minimalFallback =
+                    JSON.stringify({ parameters: {}, commands: [] }, null, 2) + '\n';
+                let fileContent: string;
+                if (fs.existsSync(templatePath)) {
+                    fileContent = fs.readFileSync(templatePath, 'utf-8');
+                    try {
+                        JSON.parse(fileContent);
+                    } catch (e) {
+                        vscode.window.showWarningMessage(
+                            `template_commands.json is invalid JSON (${e}); created empty config instead.`
+                        );
+                        fileContent = minimalFallback;
+                    }
+                } else {
+                    vscode.window.showWarningMessage(
+                        `Template not found (expected bundled other_files/template_commands.json); created empty config.`
+                    );
+                    fileContent = minimalFallback;
+                }
+                if (!fileContent.endsWith('\n')) {
+                    fileContent += '\n';
+                }
 
                 const filePath = path.join(configDir, `${name}.json`);
-                fs.writeFileSync(filePath, JSON.stringify(template, null, 2) + '\n', 'utf-8');
+                fs.writeFileSync(filePath, fileContent, 'utf-8');
 
                 provider.refresh();
 
