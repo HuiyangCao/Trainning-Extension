@@ -34,6 +34,7 @@ function activate(context) {
     const addFavoriteFolderCmd = (0, actions_1.registerAddFavoriteFolderCommand)(context);
     const revealFolderCmd = (0, actions_1.registerRevealFolderCommand)(context);
     const copyFileNameCmd = (0, actions_1.registerCopyFileNameCommand)();
+    const stageSelectedLinesCmd = (0, actions_1.registerStageSelectedLinesCommand)();
     const deleteModelFilesCmd = (0, actions_1.registerDeleteModelFilesCommand)(context);
     const killPythonDebugCmd = (0, actions_1.registerKillPythonDebugCommand)();
     const debugProvider = (0, debug_1.registerDebugConfigurationProviderAndCommand)(context);
@@ -41,7 +42,7 @@ function activate(context) {
     const sshDisposables = (0, sshManager_1.registerSshServerView)(context);
     const webDisposables = (0, webExplorer_1.registerWebExplorerView)(context);
     const logsDisposables = (0, logsExplorer_1.registerLogsExplorerView)(context);
-    context.subscriptions.push(cmd, copyFilesCmd, addFavoriteFolderCmd, revealFolderCmd, copyFileNameCmd, deleteModelFilesCmd, killPythonDebugCmd, debugProvider, ...cmdMgrDisposables, ...sshDisposables, ...webDisposables, ...logsDisposables);
+    context.subscriptions.push(cmd, copyFilesCmd, addFavoriteFolderCmd, revealFolderCmd, copyFileNameCmd, stageSelectedLinesCmd, deleteModelFilesCmd, killPythonDebugCmd, debugProvider, ...cmdMgrDisposables, ...sshDisposables, ...webDisposables, ...logsDisposables);
 }
 function deactivate() { }
 //# sourceMappingURL=extension.js.map

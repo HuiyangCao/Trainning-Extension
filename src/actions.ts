@@ -4,6 +4,126 @@ import * as fs from 'fs';
 import { spawn } from 'child_process';
 import { EXTENSION_ID } from './constants';
 
+interface GitResult {
+    stdout: string;
+    stderr: string;
+}
+
+interface LineRange {
+    start: number;
+    end: number;
+}
+
+function runGit(args: string[], cwd: string, input?: string): Promise<GitResult> {
+    return new Promise((resolve, reject) => {
+        const proc = spawn('git', args, { cwd });
+        let stdout = '';
+        let stderr = '';
+
+        proc.stdout.on('data', (data: Buffer) => { stdout += data.toString(); });
+        proc.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
+        proc.on('error', reject);
+        proc.on('close', (code) => {
+            if (code === 0) {
+                resolve({ stdout, stderr });
+            } else {
+                reject(new Error((stderr || stdout || `git exited with code ${code}`).trim()));
+            }
+        });
+
+        if (input !== undefined) {
+            proc.stdin.write(input);
+        }
+        proc.stdin.end();
+    });
+}
+
+function getSelectedLineRanges(editor: vscode.TextEditor): LineRange[] {
+    const ranges = editor.selections.map((selection) => {
+        const start = selection.start.isBefore(selection.end) ? selection.start : selection.end;
+        const end = selection.start.isBefore(selection.end) ? selection.end : selection.start;
+        let endLine = end.line;
+
+        if (!selection.isEmpty && end.character === 0 && end.line > start.line) {
+            endLine -= 1;
+        }
+
+        return {
+            start: start.line + 1,
+            end: Math.max(start.line, endLine) + 1,
+        };
+    }).sort((a, b) => a.start - b.start);
+
+    const merged: LineRange[] = [];
+    for (const range of ranges) {
+        const last = merged[merged.length - 1];
+        if (last && range.start <= last.end + 1) {
+            last.end = Math.max(last.end, range.end);
+        } else {
+            merged.push({ ...range });
+        }
+    }
+
+    return merged;
+}
+
+function rangesOverlap(a: LineRange, b: LineRange): boolean {
+    return a.start <= b.end && b.start <= a.end;
+}
+
+function hunkTouchesSelection(header: string, selectedRanges: LineRange[]): boolean {
+    const match = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(header);
+    if (!match) return false;
+
+    const newStart = Number(match[1]);
+    const newLength = match[2] === undefined ? 1 : Number(match[2]);
+    const changedRange = newLength === 0
+        ? { start: newStart, end: newStart }
+        : { start: newStart, end: newStart + newLength - 1 };
+
+    return selectedRanges.some(range => rangesOverlap(range, changedRange));
+}
+
+function buildSelectedPatch(diff: string, selectedRanges: LineRange[]): { patch: string; hunkCount: number } {
+    const lines = diff.split('\n');
+    if (lines[lines.length - 1] === '') {
+        lines.pop();
+    }
+
+    const header: string[] = [];
+    const hunks: string[][] = [];
+    let i = 0;
+
+    while (i < lines.length && !lines[i].startsWith('@@ ')) {
+        header.push(lines[i]);
+        i += 1;
+    }
+
+    while (i < lines.length) {
+        const hunk: string[] = [];
+        hunk.push(lines[i]);
+        i += 1;
+
+        while (i < lines.length && !lines[i].startsWith('@@ ')) {
+            hunk.push(lines[i]);
+            i += 1;
+        }
+
+        if (hunkTouchesSelection(hunk[0], selectedRanges)) {
+            hunks.push(hunk);
+        }
+    }
+
+    if (hunks.length === 0) {
+        return { patch: '', hunkCount: 0 };
+    }
+
+    return {
+        patch: [...header, ...hunks.flat()].join('\n') + '\n',
+        hunkCount: hunks.length,
+    };
+}
+
 export function registerCopyWithRefCommand(context: vscode.ExtensionContext) {
     return vscode.commands.registerCommand(`${EXTENSION_ID}.copy`, async () => {
         const editor = vscode.window.activeTextEditor;
@@ -43,6 +163,65 @@ export function registerCopyFilesToSystemCommand() {
                     vscode.window.setStatusBarMessage(`Copied ${targets.length} file(s) to system clipboard`, 2000);
                 }
             });
+        }
+    );
+}
+
+export function registerStageSelectedLinesCommand() {
+    return vscode.commands.registerCommand(
+        `${EXTENSION_ID}.stageSelectedLines`,
+        async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) return;
+
+            const document = editor.document;
+            if (document.uri.scheme !== 'file') {
+                vscode.window.showWarningMessage('只能暂存本地文件中的选中行。');
+                return;
+            }
+
+            if (document.isDirty && !await document.save()) {
+                vscode.window.showWarningMessage('文件保存失败，未暂存选中行。');
+                return;
+            }
+
+            const filePath = document.uri.fsPath;
+            const cwd = path.dirname(filePath);
+            const selectedRanges = getSelectedLineRanges(editor);
+
+            try {
+                const root = (await runGit(['rev-parse', '--show-toplevel'], cwd)).stdout.trim();
+                const relPath = path.relative(root, filePath);
+                const diff = (await runGit([
+                    'diff',
+                    '--no-ext-diff',
+                    '--unified=0',
+                    '--',
+                    relPath,
+                ], root)).stdout;
+
+                if (!diff.trim()) {
+                    vscode.window.showInformationMessage('当前文件没有可暂存的未暂存改动。');
+                    return;
+                }
+
+                const { patch, hunkCount } = buildSelectedPatch(diff, selectedRanges);
+                if (!patch) {
+                    vscode.window.showInformationMessage('选中行没有可暂存的改动。');
+                    return;
+                }
+
+                await runGit([
+                    'apply',
+                    '--cached',
+                    '--unidiff-zero',
+                    '--whitespace=nowarn',
+                ], root, patch);
+                await vscode.commands.executeCommand('git.refresh');
+                vscode.window.setStatusBarMessage(`已暂存选中行相关改动 (${hunkCount} hunk)`, 2000);
+            } catch (err) {
+                vscode.window.showErrorMessage(`暂存选中行失败: ${err instanceof Error ? err.message : String(err)}`);
+            }
         }
     );
 }

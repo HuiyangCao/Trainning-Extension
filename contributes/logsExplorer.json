@@ -22,6 +22,18 @@
     {
       "command": "trainning_extension.copyOnnxFilePath",
       "title": "Copy Path"
+    },
+    {
+      "command": "trainning_extension.compareSelectedLogFiles",
+      "title": "Compare Selected File",
+      "icon": "$(diff)"
+    }
+  ],
+  "keybindings": [
+    {
+      "command": "trainning_extension.copyOnnxFilePath",
+      "key": "ctrl+alt+c",
+      "when": "focusedView == trainning_extension_logs"
     }
   ],
   "views": {
@@ -53,22 +65,47 @@
     "view/item/context": [
       {
         "command": "trainning_extension.copyOnnxFiles",
-        "when": "view == trainning_extension_logs && viewItem == onnxFile",
+        "when": "view == trainning_extension_logs && viewItem == runFile",
         "group": "inline@1"
       },
       {
         "command": "trainning_extension.copyOnnxFiles",
-        "when": "view == trainning_extension_logs && viewItem == onnxFile",
+        "when": "view == trainning_extension_logs && viewItem == runFile",
         "group": "navigation@1"
       },
       {
         "command": "trainning_extension.copyOnnxFilePath",
-        "when": "view == trainning_extension_logs && viewItem == onnxFile",
+        "when": "view == trainning_extension_logs && viewItem == runFile",
         "group": "navigation@2"
       },
       {
         "command": "trainning_extension.revealOnnxInExplorer",
-        "when": "view == trainning_extension_logs && viewItem == onnxFile",
+        "when": "view == trainning_extension_logs && viewItem == runFile",
+        "group": "navigation@3"
+      },
+      {
+        "command": "trainning_extension.compareSelectedLogFiles",
+        "when": "view == trainning_extension_logs && viewItem == runFile",
+        "group": "navigation@4"
+      },
+      {
+        "command": "trainning_extension.copyOnnxFiles",
+        "when": "view == trainning_extension_logs && viewItem == runDirectory",
+        "group": "inline@1"
+      },
+      {
+        "command": "trainning_extension.copyOnnxFiles",
+        "when": "view == trainning_extension_logs && viewItem == runDirectory",
+        "group": "navigation@1"
+      },
+      {
+        "command": "trainning_extension.copyOnnxFilePath",
+        "when": "view == trainning_extension_logs && viewItem == runDirectory",
+        "group": "navigation@2"
+      },
+      {
+        "command": "trainning_extension.revealOnnxInExplorer",
+        "when": "view == trainning_extension_logs && viewItem == runDirectory",
         "group": "navigation@3"
       },
       {
@@ -92,6 +129,11 @@
         "group": "navigation@3"
       },
       {
+        "command": "trainning_extension.compareSelectedLogFiles",
+        "when": "view == trainning_extension_logs && viewItem == runFolder",
+        "group": "navigation@4"
+      },
+      {
         "command": "trainning_extension.copyOnnxFiles",
         "when": "view == trainning_extension_logs && viewItem == taskGroup",
         "group": "inline@1"
@@ -100,6 +142,16 @@
         "command": "trainning_extension.copyOnnxFiles",
         "when": "view == trainning_extension_logs && viewItem == taskGroup",
         "group": "navigation@1"
+      },
+      {
+        "command": "trainning_extension.copyOnnxFilePath",
+        "when": "view == trainning_extension_logs && viewItem == taskGroup",
+        "group": "navigation@2"
+      },
+      {
+        "command": "trainning_extension.compareSelectedLogFiles",
+        "when": "view == trainning_extension_logs && viewItem == taskGroup",
+        "group": "navigation@4"
       }
     ]
   },

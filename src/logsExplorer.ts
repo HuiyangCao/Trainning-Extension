@@ -23,8 +23,17 @@ interface RunFolderNode {
     folderPath: string;
     /** 从文件夹名解析的时间戳 */
     parsedTime: number;
-    /** 文件夹内的可展示文件 */
-    children: RunFileNode[];
+    /** 文件夹内的可展示文件/子文件夹 */
+    children: RunChildNode[];
+}
+
+/** 运行文件夹内的子文件夹，如 params/git */
+interface RunDirectoryNode {
+    kind: 'runDirectory';
+    name: string;
+    fullPath: string;
+    children: RunChildNode[];
+    parent: RunFolderNode | RunDirectoryNode;
 }
 
 /** 运行文件夹内的具体文件（onnx 或 pt） */
@@ -33,11 +42,12 @@ interface RunFileNode {
     name: string;
     fullPath: string;
     size: number;
-    /** 所属 RunFolder 引用，用于 getParent */
-    parentFolder: RunFolderNode;
+    /** 所属文件夹引用，用于 getParent */
+    parent: RunFolderNode | RunDirectoryNode;
 }
 
-type LogsNode = TaskGroupNode | RunFolderNode | RunFileNode;
+type RunChildNode = RunDirectoryNode | RunFileNode;
+type LogsNode = TaskGroupNode | RunFolderNode | RunDirectoryNode | RunFileNode;
 
 // ──────────────────────── Per-project config ───────────────────
 
@@ -141,6 +151,82 @@ function findLargestModelPt(dirPath: string): { name: string; fullPath: string; 
     }
 }
 
+function createFileNode(
+    parent: RunFolderNode | RunDirectoryNode,
+    filePath: string,
+    name: string,
+): RunFileNode | null {
+    try {
+        const stat = fs.statSync(filePath);
+        return {
+            kind: 'runFile',
+            name,
+            fullPath: filePath,
+            size: stat.size,
+            parent,
+        };
+    } catch {
+        return null;
+    }
+}
+
+function sortRunChildren(children: RunChildNode[]): RunChildNode[] {
+    return children.sort((a, b) => {
+        if (a.kind !== b.kind) {
+            return a.kind === 'runDirectory' ? -1 : 1;
+        }
+        return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+    });
+}
+
+function buildRunChildren(
+    dirPath: string,
+    parent: RunFolderNode | RunDirectoryNode,
+    depth: number = 0,
+    maxDepth: number = 20,
+): RunChildNode[] {
+    if (depth > maxDepth) return [];
+
+    let entries: fs.Dirent[];
+    try {
+        entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    } catch {
+        return [];
+    }
+
+    const children: RunChildNode[] = [];
+    const bestPt = findLargestModelPt(dirPath);
+    const bestPtPath = bestPt?.fullPath;
+
+    for (const e of entries) {
+        const fullPath = path.join(dirPath, e.name);
+
+        if (e.isDirectory()) {
+            const dirNode: RunDirectoryNode = {
+                kind: 'runDirectory',
+                name: e.name,
+                fullPath,
+                children: [],
+                parent,
+            };
+            dirNode.children = buildRunChildren(fullPath, dirNode, depth + 1, maxDepth);
+            children.push(dirNode);
+            continue;
+        }
+
+        if (!e.isFile()) continue;
+
+        if (/^model_\d+\.pt$/.test(e.name) && fullPath !== bestPtPath) {
+            continue;
+        }
+
+        const fileNode = createFileNode(parent, fullPath, e.name);
+        if (fileNode) children.push(fileNode);
+    }
+
+    return sortRunChildren(children);
+}
+
 /**
  * 判断一个目录是否为「训练运行文件夹」。
  * 条件：文件夹名匹配日期格式 YYYY-MM-DD_HH-MM-SS，
@@ -195,33 +281,7 @@ function scanLogsTree(directory: string, days: number, maxDepth: number = 5): Ta
                 parsedTime,
                 children: [],
             };
-
-            // 添加 onnx 文件（如有）
-            const onnxEntry = entries.find(e => e.isFile() && e.name.endsWith('.onnx'));
-            if (onnxEntry) {
-                const onnxFullPath = path.join(dir, onnxEntry.name);
-                let onnxSize = 0;
-                try { onnxSize = fs.statSync(onnxFullPath).size; } catch { /* ignore */ }
-                runFolder.children.push({
-                    kind: 'runFile',
-                    name: onnxEntry.name,
-                    fullPath: onnxFullPath,
-                    size: onnxSize,
-                    parentFolder: runFolder,
-                });
-            }
-
-            // 编号最大的 model_*.pt
-            const bestPt = findLargestModelPt(dir);
-            if (bestPt) {
-                runFolder.children.push({
-                    kind: 'runFile',
-                    name: bestPt.name,
-                    fullPath: bestPt.fullPath,
-                    size: bestPt.size,
-                    parentFolder: runFolder,
-                });
-            }
+            runFolder.children = buildRunChildren(dir, runFolder);
 
             const list = groupMap.get(groupKey) ?? [];
             list.push(runFolder);
@@ -296,18 +356,33 @@ class LogsExplorerProvider implements vscode.TreeDataProvider<LogsNode> {
             item.iconPath = new vscode.ThemeIcon('folder');
             item.contextValue = 'runFolder';
             item.tooltip = element.folderPath;
-            // 描述中显示子文件概要
-            const names = element.children.map(c => c.name);
-            item.description = names.join('  ');
+            item.resourceUri = vscode.Uri.file(element.folderPath);
+            const folderCount = element.children.filter(c => c.kind === 'runDirectory').length;
+            const fileCount = element.children.filter(c => c.kind === 'runFile').length;
+            item.description = `${folderCount} folders  ${fileCount} files`;
             return item;
         }
 
-        // runFile (onnx / pt)
+        if (element.kind === 'runDirectory') {
+            const item = new vscode.TreeItem(element.name, vscode.TreeItemCollapsibleState.Collapsed);
+            item.contextValue = 'runDirectory';
+            item.tooltip = element.fullPath;
+            item.resourceUri = vscode.Uri.file(element.fullPath);
+            item.iconPath = new vscode.ThemeIcon('folder');
+            return item;
+        }
+
+        // runFile
         const item = new vscode.TreeItem(element.name, vscode.TreeItemCollapsibleState.None);
-        item.contextValue = 'onnxFile';
+        item.contextValue = 'runFile';
         item.description = formatSize(element.size);
         item.tooltip = element.fullPath;
         item.resourceUri = vscode.Uri.file(element.fullPath);
+        item.command = {
+            command: 'vscode.open',
+            title: 'Open',
+            arguments: [vscode.Uri.file(element.fullPath)],
+        };
         if (element.name.endsWith('.onnx')) {
             item.iconPath = new vscode.ThemeIcon('file-binary');
         } else {
@@ -326,13 +401,18 @@ class LogsExplorerProvider implements vscode.TreeDataProvider<LogsNode> {
         if (element.kind === 'runFolder') {
             return element.children;
         }
+        if (element.kind === 'runDirectory') {
+            return element.children;
+        }
         return [];
     }
 
     getParent(element: LogsNode): LogsNode | undefined {
         if (element.kind === 'runFile') {
-            // 找到所属 runFolder
-            return element.parentFolder;
+            return element.parent;
+        }
+        if (element.kind === 'runDirectory') {
+            return element.parent;
         }
         if (element.kind === 'runFolder') {
             return this.groups.find(g => g.children.includes(element));
@@ -351,25 +431,42 @@ function formatSize(bytes: number): string {
 }
 
 /**
- * 从一组节点中收集所有可复制的文件路径。
- * 选中 taskGroup → 展开所有 runFolder 的所有文件
- * 选中 runFolder → 展开其所有文件
- * 选中 runFile   → 该文件
+ * 从一组节点中收集可复制的资源路径。
+ * 文件/文件夹节点按资源本身复制，taskGroup 展开为其下的 runFolder。
  */
-function collectFilePaths(nodes: LogsNode[]): string[] {
+function collectResourcePaths(nodes: LogsNode[]): string[] {
     const paths: string[] = [];
     for (const n of nodes) {
         if (n.kind === 'runFile') {
             paths.push(n.fullPath);
+        } else if (n.kind === 'runDirectory') {
+            paths.push(n.fullPath);
         } else if (n.kind === 'runFolder') {
-            for (const c of n.children) paths.push(c.fullPath);
+            paths.push(n.folderPath);
         } else if (n.kind === 'taskGroup') {
             for (const run of n.children) {
-                for (const c of run.children) paths.push(c.fullPath);
+                paths.push(run.folderPath);
             }
         }
     }
     return [...new Set(paths)]; // 去重
+}
+
+function collectComparableFilePaths(nodes: LogsNode[]): string[] {
+    const paths: string[] = [];
+
+    function visit(node: LogsNode): void {
+        if (node.kind === 'runFile') {
+            paths.push(node.fullPath);
+        } else if (node.kind === 'runDirectory' || node.kind === 'runFolder') {
+            for (const child of node.children) visit(child);
+        } else if (node.kind === 'taskGroup') {
+            for (const run of node.children) visit(run);
+        }
+    }
+
+    for (const node of nodes) visit(node);
+    return [...new Set(paths)];
 }
 
 // ──────────────────── Command handlers ─────────────────────────
@@ -402,9 +499,9 @@ async function cmdCopyOnnxFiles(
     if (!nodes.length) nodes = [...treeView.selection];
     if (!nodes.length && _clickedNode) nodes = [_clickedNode];
 
-    const filePaths = collectFilePaths(nodes);
+    const filePaths = collectResourcePaths(nodes);
     if (!filePaths.length) {
-        vscode.window.showWarningMessage('没有选中任何文件');
+        vscode.window.showWarningMessage('没有选中任何文件或文件夹');
         return;
     }
 
@@ -431,15 +528,40 @@ async function cmdCopyOnnxFilePath(
     if (!nodes.length) nodes = [...treeView.selection];
     if (!nodes.length && _clickedNode) nodes = [_clickedNode];
 
-    const paths = collectFilePaths(nodes);
+    const paths = collectResourcePaths(nodes);
     if (!paths.length) return;
     await vscode.env.clipboard.writeText(paths.join('\n'));
     vscode.window.setStatusBarMessage(`已复制 ${paths.length} 条路径`, 2000);
 }
 
+async function cmdCompareSelectedLogFiles(
+    treeView: vscode.TreeView<LogsNode>,
+    _clickedNode: LogsNode | undefined,
+    _selectedNodes: LogsNode[] | undefined,
+) {
+    let nodes: LogsNode[] = _selectedNodes?.length ? _selectedNodes : [];
+    if (!nodes.length) nodes = [...treeView.selection];
+    if (!nodes.length && _clickedNode) nodes = [_clickedNode];
+
+    const paths = collectComparableFilePaths(nodes);
+    if (paths.length !== 2) {
+        vscode.window.showWarningMessage(`请选择 2 个文件进行比较；当前选中 ${paths.length} 个文件`);
+        return;
+    }
+
+    const left = vscode.Uri.file(paths[0]);
+    const right = vscode.Uri.file(paths[1]);
+    await vscode.commands.executeCommand(
+        'vscode.diff',
+        left,
+        right,
+        `${path.basename(paths[0])} <-> ${path.basename(paths[1])}`,
+    );
+}
+
 async function cmdRevealOnnx(node: LogsNode | undefined) {
     if (!node) return;
-    if (node.kind === 'runFile') {
+    if (node.kind === 'runFile' || node.kind === 'runDirectory') {
         await vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(node.fullPath));
     } else if (node.kind === 'runFolder') {
         await vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(node.folderPath));
@@ -487,6 +609,12 @@ export function registerLogsExplorerView(context: vscode.ExtensionContext): vsco
             `${EXTENSION_ID}.copyOnnxFilePath`,
             (clickedNode?: LogsNode, selectedNodes?: LogsNode[]) =>
                 cmdCopyOnnxFilePath(treeView, clickedNode, selectedNodes),
+        ),
+
+        vscode.commands.registerCommand(
+            `${EXTENSION_ID}.compareSelectedLogFiles`,
+            (clickedNode?: LogsNode, selectedNodes?: LogsNode[]) =>
+                cmdCompareSelectedLogFiles(treeView, clickedNode, selectedNodes),
         ),
 
         vscode.commands.registerCommand(
