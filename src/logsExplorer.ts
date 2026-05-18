@@ -329,6 +329,10 @@ class LogsExplorerProvider implements vscode.TreeDataProvider<LogsNode> {
         this._onDidChange.fire();
     }
 
+    dispose(): void {
+        this._onDidChange.dispose();
+    }
+
     private rescan(): void {
         if (!this.logsDir || !fs.existsSync(this.logsDir)) {
             this.groups = [];
@@ -510,6 +514,7 @@ async function cmdCopyOnnxFiles(
     xclip.on('error', () => {
         vscode.window.showErrorMessage('复制失败: 未找到 xclip。请运行: sudo apt install xclip');
     });
+    xclip.stdin.on('error', () => { /* avoid uncaught EPIPE when xclip missing */ });
     xclip.stdin.write(content);
     xclip.stdin.end();
     xclip.on('close', (code) => {
@@ -532,6 +537,29 @@ async function cmdCopyOnnxFilePath(
     if (!paths.length) return;
     await vscode.env.clipboard.writeText(paths.join('\n'));
     vscode.window.setStatusBarMessage(`已复制 ${paths.length} 条路径`, 2000);
+}
+
+async function cmdCopyRelativeLogPath(
+    treeView: vscode.TreeView<LogsNode>,
+    _clickedNode: LogsNode | undefined,
+    _selectedNodes: LogsNode[] | undefined,
+) {
+    let nodes: LogsNode[] = _selectedNodes?.length ? _selectedNodes : [];
+    if (!nodes.length) nodes = [...treeView.selection];
+    if (!nodes.length && _clickedNode) nodes = [_clickedNode];
+
+    const logsDir = getLogsDirectory();
+    if (!logsDir) {
+        vscode.window.showWarningMessage('请先设置 Logs 目录');
+        return;
+    }
+
+    const paths = collectResourcePaths(nodes);
+    if (!paths.length) return;
+
+    const relativePaths = paths.map(p => path.relative(logsDir, p) || '.');
+    await vscode.env.clipboard.writeText(relativePaths.join('\n'));
+    vscode.window.setStatusBarMessage(`已复制 ${relativePaths.length} 条相对路径`, 2000);
 }
 
 async function cmdCompareSelectedLogFiles(
@@ -590,6 +618,7 @@ export function registerLogsExplorerView(context: vscode.ExtensionContext): vsco
     const disposables: vscode.Disposable[] = [
         treeView,
         configWatcher,
+        new vscode.Disposable(() => provider.dispose()),
 
         vscode.commands.registerCommand(`${EXTENSION_ID}.setLogsDirectory`, () =>
             cmdSetLogsDirectory(provider),
@@ -609,6 +638,12 @@ export function registerLogsExplorerView(context: vscode.ExtensionContext): vsco
             `${EXTENSION_ID}.copyOnnxFilePath`,
             (clickedNode?: LogsNode, selectedNodes?: LogsNode[]) =>
                 cmdCopyOnnxFilePath(treeView, clickedNode, selectedNodes),
+        ),
+
+        vscode.commands.registerCommand(
+            `${EXTENSION_ID}.copyRelativeLogPath`,
+            (clickedNode?: LogsNode, selectedNodes?: LogsNode[]) =>
+                cmdCopyRelativeLogPath(treeView, clickedNode, selectedNodes),
         ),
 
         vscode.commands.registerCommand(

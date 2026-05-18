@@ -255,10 +255,13 @@ async function isRemoteDirectory(serverNode: SshHostNode, remotePath: string): P
     const host = serverNode.hostname || serverNode.host;
 
     return new Promise((resolve) => {
-        const proc = spawn('ssh', [...sshArgs, `${user}${host}`, `test -d "${remotePath}" && echo 1 || echo 0`], { timeout: 5000 });
+        const proc = spawn('ssh', [...sshArgs, `${user}${host}`, `test -d "${remotePath}" && echo 1 || echo 0`], {
+            timeout: 5000,
+            stdio: ['ignore', 'pipe', 'ignore'],
+        });
         let output = '';
         proc.stdout.on('data', (d) => { output += d.toString(); });
-        proc.on('close', (code) => {
+        proc.on('close', () => {
             resolve(output.trim() === '1');
         });
         proc.on('error', () => resolve(false));
@@ -347,6 +350,8 @@ class SshServerProvider implements vscode.TreeDataProvider<SshTreeNode> {
     private parseError: string | null = null;
     private fileWatcher: vscode.FileSystemWatcher | null = null;
     private pingTimer: NodeJS.Timeout | null = null;
+    private pingRunning = false;
+    private disposed = false;
     private hosts: SshHostNode[] = [];
 
     constructor() {
@@ -359,7 +364,10 @@ class SshServerProvider implements vscode.TreeDataProvider<SshTreeNode> {
         const target = host.hostname || host.host;
         return new Promise((resolve) => {
             const start = Date.now();
-            const proc = spawn('ping', ['-c', '1', '-W', '3', target], { timeout: 5000 });
+            const proc = spawn('ping', ['-c', '1', '-W', '3', target], {
+                timeout: 5000,
+                stdio: ['ignore', 'pipe', 'ignore'],
+            });
             let output = '';
             proc.stdout.on('data', (data) => { output += data.toString(); });
             proc.on('close', (code) => {
@@ -379,23 +387,38 @@ class SshServerProvider implements vscode.TreeDataProvider<SshTreeNode> {
     }
 
     private async pingAll(): Promise<void> {
-        for (const host of this.hosts) {
-            host.latency = await this.pingHost(host);
+        if (this.pingRunning || this.disposed) return;
+        this.pingRunning = true;
+        try {
+            for (const host of this.hosts) {
+                if (this.disposed) return;
+                host.latency = await this.pingHost(host);
+            }
+            if (!this.disposed) {
+                this._onDidChangeTreeData.fire();
+            }
+        } finally {
+            this.pingRunning = false;
         }
-        this._onDidChangeTreeData.fire();
+    }
+
+    private scheduleNextPing(): void {
+        if (this.disposed) return;
+        this.pingTimer = setTimeout(async () => {
+            this.pingTimer = null;
+            await this.pingAll();
+            this.scheduleNextPing();
+        }, 2500);
     }
 
     private startPingTimer(): void {
-        if (this.pingTimer) {
-            clearInterval(this.pingTimer);
-        }
-        this.pingAll();
-        this.pingTimer = setInterval(() => this.pingAll(), 2500);
+        this.stopPingTimer();
+        this.pingAll().finally(() => this.scheduleNextPing());
     }
 
     private stopPingTimer(): void {
         if (this.pingTimer) {
-            clearInterval(this.pingTimer);
+            clearTimeout(this.pingTimer);
             this.pingTimer = null;
         }
     }
@@ -421,10 +444,13 @@ class SshServerProvider implements vscode.TreeDataProvider<SshTreeNode> {
     }
 
     dispose(): void {
+        this.disposed = true;
         if (this.fileWatcher) {
             this.fileWatcher.dispose();
+            this.fileWatcher = null;
         }
         this.stopPingTimer();
+        this._onDidChangeTreeData.dispose();
     }
 
     refresh(): void {
@@ -747,14 +773,15 @@ async function pickRemotePath(
 
     while (true) {
         const lsCmd = `ls -la "${currentPath}" 2>/dev/null`;
-        const fullCmd = `ssh ${sshArgs.join(' ')} ${user}${host} "${lsCmd}"`;
 
         try {
             const output = await new Promise<string>((resolve, reject) => {
-                const proc = spawn('ssh', [...sshArgs, `${user}${host}`, lsCmd], { timeout: 10000 });
+                const proc = spawn('ssh', [...sshArgs, `${user}${host}`, lsCmd], {
+                    timeout: 10000,
+                    stdio: ['ignore', 'pipe', 'ignore'],
+                });
                 let out = '';
                 proc.stdout.on('data', (d) => { out += d.toString(); });
-                proc.stderr.on('data', () => {});
                 proc.on('close', (code) => {
                     if (code === 0) resolve(out);
                     else reject(new Error(`Failed to list remote directory`));
@@ -964,7 +991,10 @@ async function pickRemoteExcludes(serverNode: SshHostNode, sourceRoot: string): 
         const lsCmd = `ls -la "${currentPath}" 2>/dev/null`;
         try {
             const output = await new Promise<string>((resolve, reject) => {
-                const proc = spawn('ssh', [...sshArgs, `${user}${host}`, lsCmd], { timeout: 10000 });
+                const proc = spawn('ssh', [...sshArgs, `${user}${host}`, lsCmd], {
+                    timeout: 10000,
+                    stdio: ['ignore', 'pipe', 'ignore'],
+                });
                 let out = '';
                 proc.stdout.on('data', (d) => { out += d.toString(); });
                 proc.on('close', (code) => (code === 0 ? resolve(out) : reject(new Error('failed'))));

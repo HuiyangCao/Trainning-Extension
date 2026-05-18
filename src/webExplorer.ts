@@ -63,6 +63,10 @@ class WebExplorerProvider implements vscode.TreeDataProvider<BookmarkNode> {
         this._onDidChangeTreeData.fire();
     }
 
+    dispose(): void {
+        this._onDidChangeTreeData.dispose();
+    }
+
     getTreeItem(element: BookmarkNode): vscode.TreeItem {
         const treeItem = new vscode.TreeItem(element.name, vscode.TreeItemCollapsibleState.None);
         treeItem.tooltip = element.url;
@@ -193,5 +197,6 @@ export function registerWebExplorerView(context: vscode.ExtensionContext): vscod
         provider.refresh();
     });
 
-    return [treeView, addBookmarkCmd, removeBookmarkCmd, openBookmarkCmd, refreshWebCmd];
+    const providerDisposable = new vscode.Disposable(() => provider.dispose());
+    return [treeView, addBookmarkCmd, removeBookmarkCmd, openBookmarkCmd, refreshWebCmd, providerDisposable];
 }

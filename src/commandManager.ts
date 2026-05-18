@@ -69,6 +69,7 @@ class CommandManagerProvider implements vscode.TreeDataProvider<CommandNode> {
             watcher.dispose();
         }
         this.fileWatchers = [];
+        this._onDidChangeTreeData.dispose();
     }
 
     refresh(): void {

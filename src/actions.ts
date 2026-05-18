@@ -156,6 +156,7 @@ export function registerCopyFilesToSystemCommand() {
             xclip.on('error', () => {
                 vscode.window.showErrorMessage('Copy to system clipboard failed: xclip not found. Run: sudo apt install xclip');
             });
+            xclip.stdin.on('error', () => { /* avoid uncaught EPIPE when xclip missing */ });
             xclip.stdin.write(content);
             xclip.stdin.end();
             xclip.on('close', (code) => {
@@ -262,17 +263,30 @@ export function registerRevealFolderCommand(context: vscode.ExtensionContext) {
             const favKey = `favoriteFolders.${root}`;
             const favs: string[] = context.workspaceState.get(favKey, []);
 
+            const cfg = vscode.workspace.getConfiguration(EXTENSION_ID);
+            const maxDepth = cfg.get<number>('revealFolderMaxDepth', 6);
+            const MAX_BUF_BYTES = 8 * 1024 * 1024;
             const output = await new Promise<string>((resolve, reject) => {
                 const proc = spawn('find', [
-                    root, '-type', 'd',
+                    root,
+                    '-maxdepth', String(maxDepth),
+                    '-type', 'd',
                     '-not', '-path', '*/.git/*',
                     '-not', '-path', '*/.git',
                     '-not', '-path', '*/node_modules/*',
                     '-not', '-path', '*/__pycache__/*',
                     '-not', '-path', '*/.venv/*',
-                ]);
+                ], { stdio: ['ignore', 'pipe', 'ignore'] });
                 let buf = '';
-                proc.stdout.on('data', (data: Buffer) => { buf += data.toString(); });
+                let truncated = false;
+                proc.stdout.on('data', (data: Buffer) => {
+                    if (truncated) return;
+                    buf += data.toString();
+                    if (buf.length > MAX_BUF_BYTES) {
+                        truncated = true;
+                        proc.kill();
+                    }
+                });
                 proc.on('close', () => resolve(buf));
                 proc.on('error', reject);
             });

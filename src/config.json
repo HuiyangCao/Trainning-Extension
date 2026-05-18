@@ -10,6 +10,7 @@
         "editor.fontLigatures": true,
         "terminal.integrated.fontFamily": "JetBrains Mono, monospace",
         "terminal.integrated.fontSize": 14,
+        "terminal.integrated.sendKeybindingsToShell": false,
         "debug.console.fontFamily": "JetBrains Mono, monospace",
         "debug.console.fontSize": 14,
         "notebook.outputFontFamily": "JetBrains Mono, monospace",

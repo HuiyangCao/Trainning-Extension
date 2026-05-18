@@ -24,6 +24,10 @@
       "title": "Copy Path"
     },
     {
+      "command": "trainning_extension.copyRelativeLogPath",
+      "title": "Copy Relative Path"
+    },
+    {
       "command": "trainning_extension.compareSelectedLogFiles",
       "title": "Compare Selected File",
       "icon": "$(diff)"
@@ -33,6 +37,11 @@
     {
       "command": "trainning_extension.copyOnnxFilePath",
       "key": "ctrl+alt+c",
+      "when": "focusedView == trainning_extension_logs"
+    },
+    {
+      "command": "trainning_extension.copyRelativeLogPath",
+      "key": "ctrl+shift+alt+c",
       "when": "focusedView == trainning_extension_logs"
     }
   ],
