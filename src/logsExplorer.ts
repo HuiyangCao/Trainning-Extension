@@ -562,6 +562,22 @@ async function cmdCopyRelativeLogPath(
     vscode.window.setStatusBarMessage(`已复制 ${relativePaths.length} 条相对路径`, 2000);
 }
 
+async function cmdCopyLogFileName(
+    treeView: vscode.TreeView<LogsNode>,
+    _clickedNode: LogsNode | undefined,
+    _selectedNodes: LogsNode[] | undefined,
+) {
+    let nodes: LogsNode[] = _selectedNodes?.length ? _selectedNodes : [];
+    if (!nodes.length) nodes = [...treeView.selection];
+    if (!nodes.length && _clickedNode) nodes = [_clickedNode];
+
+    const paths = collectResourcePaths(nodes);
+    if (!paths.length) return;
+    const names = paths.map(p => path.basename(p));
+    await vscode.env.clipboard.writeText(names.join('\n'));
+    vscode.window.setStatusBarMessage(`已复制 ${names.length} 个名称`, 2000);
+}
+
 async function cmdCompareSelectedLogFiles(
     treeView: vscode.TreeView<LogsNode>,
     _clickedNode: LogsNode | undefined,
@@ -644,6 +660,12 @@ export function registerLogsExplorerView(context: vscode.ExtensionContext): vsco
             `${EXTENSION_ID}.copyRelativeLogPath`,
             (clickedNode?: LogsNode, selectedNodes?: LogsNode[]) =>
                 cmdCopyRelativeLogPath(treeView, clickedNode, selectedNodes),
+        ),
+
+        vscode.commands.registerCommand(
+            `${EXTENSION_ID}.copyLogFileName`,
+            (clickedNode?: LogsNode, selectedNodes?: LogsNode[]) =>
+                cmdCopyLogFileName(treeView, clickedNode, selectedNodes),
         ),
 
         vscode.commands.registerCommand(

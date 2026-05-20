@@ -28,6 +28,10 @@
       "title": "Copy Relative Path"
     },
     {
+      "command": "trainning_extension.copyLogFileName",
+      "title": "Copy File Name"
+    },
+    {
       "command": "trainning_extension.compareSelectedLogFiles",
       "title": "Compare Selected File",
       "icon": "$(diff)"
@@ -88,16 +92,26 @@
         "group": "navigation@2"
       },
       {
-        "command": "trainning_extension.revealOnnxInExplorer",
+        "command": "trainning_extension.copyRelativeLogPath",
         "when": "view == trainning_extension_logs && viewItem == runFile",
         "group": "navigation@3"
       },
       {
-        "command": "trainning_extension.compareSelectedLogFiles",
+        "command": "trainning_extension.copyLogFileName",
         "when": "view == trainning_extension_logs && viewItem == runFile",
         "group": "navigation@4"
       },
       {
+        "command": "trainning_extension.revealOnnxInExplorer",
+        "when": "view == trainning_extension_logs && viewItem == runFile",
+        "group": "navigation@5"
+      },
+      {
+        "command": "trainning_extension.compareSelectedLogFiles",
+        "when": "view == trainning_extension_logs && viewItem == runFile",
+        "group": "navigation@6"
+      },
+      {
         "command": "trainning_extension.copyOnnxFiles",
         "when": "view == trainning_extension_logs && viewItem == runDirectory",
         "group": "inline@1"
@@ -113,11 +127,21 @@
         "group": "navigation@2"
       },
       {
-        "command": "trainning_extension.revealOnnxInExplorer",
+        "command": "trainning_extension.copyRelativeLogPath",
         "when": "view == trainning_extension_logs && viewItem == runDirectory",
         "group": "navigation@3"
       },
       {
+        "command": "trainning_extension.copyLogFileName",
+        "when": "view == trainning_extension_logs && viewItem == runDirectory",
+        "group": "navigation@4"
+      },
+      {
+        "command": "trainning_extension.revealOnnxInExplorer",
+        "when": "view == trainning_extension_logs && viewItem == runDirectory",
+        "group": "navigation@5"
+      },
+      {
         "command": "trainning_extension.copyOnnxFiles",
         "when": "view == trainning_extension_logs && viewItem == runFolder",
         "group": "inline@1"
@@ -133,14 +157,24 @@
         "group": "navigation@2"
       },
       {
-        "command": "trainning_extension.revealOnnxInExplorer",
+        "command": "trainning_extension.copyRelativeLogPath",
         "when": "view == trainning_extension_logs && viewItem == runFolder",
         "group": "navigation@3"
       },
       {
-        "command": "trainning_extension.compareSelectedLogFiles",
+        "command": "trainning_extension.copyLogFileName",
         "when": "view == trainning_extension_logs && viewItem == runFolder",
         "group": "navigation@4"
+      },
+      {
+        "command": "trainning_extension.revealOnnxInExplorer",
+        "when": "view == trainning_extension_logs && viewItem == runFolder",
+        "group": "navigation@5"
+      },
+      {
+        "command": "trainning_extension.compareSelectedLogFiles",
+        "when": "view == trainning_extension_logs && viewItem == runFolder",
+        "group": "navigation@6"
       },
       {
         "command": "trainning_extension.copyOnnxFiles",
@@ -158,9 +192,19 @@
         "group": "navigation@2"
       },
       {
-        "command": "trainning_extension.compareSelectedLogFiles",
+        "command": "trainning_extension.copyRelativeLogPath",
+        "when": "view == trainning_extension_logs && viewItem == taskGroup",
+        "group": "navigation@3"
+      },
+      {
+        "command": "trainning_extension.copyLogFileName",
         "when": "view == trainning_extension_logs && viewItem == taskGroup",
         "group": "navigation@4"
+      },
+      {
+        "command": "trainning_extension.compareSelectedLogFiles",
+        "when": "view == trainning_extension_logs && viewItem == taskGroup",
+        "group": "navigation@5"
       }
     ]
   },
