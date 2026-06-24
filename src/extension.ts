@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { loadConfig, applySettings, applyUserKeybindings } from './config';
+import { loadConfig, applySettings, applyUserKeybindings, resetSettings } from './config';
 import {
     registerCopyWithRefCommand,
     registerCopyFilesToSystemCommand,
@@ -31,11 +31,13 @@ export function activate(context: vscode.ExtensionContext) {
         }
     })();
 
+    const cfg = loadConfig(context.extensionPath);
     if (shouldApplyJetbrainsPreset) {
-        const cfg = loadConfig(context.extensionPath);
         applySettings(context, cfg.settings);
-        applyUserKeybindings(context, cfg.keybindings);
+    } else {
+        resetSettings(cfg.settings);
     }
+    applyUserKeybindings(context, cfg.keybindings);
 
     const cmd = registerCopyWithRefCommand(context);
     const copyFilesCmd = registerCopyFilesToSystemCommand();

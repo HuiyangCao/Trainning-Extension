@@ -24,11 +24,14 @@ function activate(context) {
             return true;
         }
     })();
+    const cfg = (0, config_1.loadConfig)(context.extensionPath);
     if (shouldApplyJetbrainsPreset) {
-        const cfg = (0, config_1.loadConfig)(context.extensionPath);
         (0, config_1.applySettings)(context, cfg.settings);
-        (0, config_1.applyUserKeybindings)(context, cfg.keybindings);
     }
+    else {
+        (0, config_1.resetSettings)(cfg.settings);
+    }
+    (0, config_1.applyUserKeybindings)(context, cfg.keybindings);
     const cmd = (0, actions_1.registerCopyWithRefCommand)(context);
     const copyFilesCmd = (0, actions_1.registerCopyFilesToSystemCommand)();
     const addFavoriteFolderCmd = (0, actions_1.registerAddFavoriteFolderCommand)(context);

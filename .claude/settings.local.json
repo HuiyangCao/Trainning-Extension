@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git config:*)",
+      "Bash(find /home/chy/vscode-copy-with-ref -type d -not -path */node_modules/*)",
+      "Bash(grep -r -i \"\\(password|secret|token|key|api|credential|auth\\)\" /home/chy/vscode-copy-with-ref/src /home/chy/vscode-copy-with-ref/*.md /home/chy/vscode-copy-with-ref/*.json /home/chy/vscode-copy-with-ref/*.py /home/chy/vscode-copy-with-ref/*.sh)",
+      "Bash(npm run:*)",
+      "Bash(ffmpeg:*)",
+      "Bash(node:*)",
+      "Bash(xxd)",
+      "Bash(chmod:*)",
+      "Bash(git rm:*)",
+      "Bash(git remote:*)",
+      "Bash(npx tsc:*)",
+      "Bash(bash reinstall.sh)",
+      "Bash(ls -la /home/chy/others_util/command_manager/*.json)",
+      "Bash(./reinstall.sh)",
+      "Bash(unzip -l copy-with-ref-0.0.1.vsix)",
+      "Bash(ls:*)",
+      "Bash(unzip -l Trainning-Extension-0.0.1.vsix)",
+      "Bash(git checkout:*)",
+      "Bash(vsce package:*)",
+      "Bash(code:*)",
+      "Bash(npm list:*)"
+    ]
+  }
+}

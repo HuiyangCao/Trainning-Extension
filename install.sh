@@ -160,10 +160,10 @@ else
     fi
 fi
 
-# JetBrains 设定总开关：决定是否应用 JetBrains 风格设置与键位
+# JetBrains 界面总开关：只决定是否应用 JetBrains 风格 UI 设置；快捷键始终应用
 JETBRAINS_MODE_ENABLED=1
-if confirm "是否启用 JetBrains 操作方式设定（键位与界面偏好）" \
-            "启用后扩展激活时会自动应用 src/config.json 中的 settings/keybindings"; then
+if confirm "是否启用 JetBrains 界面偏好（主题/字体/UI；快捷键始终保留）" \
+            "启用后扩展激活时会自动应用 src/config.json 中的 settings；快捷键始终应用"; then
     JETBRAINS_MODE_ENABLED=1
 else
     JETBRAINS_MODE_ENABLED=0
@@ -172,9 +172,9 @@ fi
 mkdir -p "$USER_CONFIG_DIR"
 echo "$JETBRAINS_MODE_ENABLED" > "$JETBRAINS_FLAG_FILE"
 if [ "$JETBRAINS_MODE_ENABLED" -eq 1 ]; then
-    success "已启用 JetBrains 操作方式设定"
+    success "已启用 JetBrains 界面偏好"
 else
-    success "已禁用 JetBrains 操作方式设定（将跳过字体安装与配置应用）"
+    success "已禁用 JetBrains 界面偏好（将跳过字体安装，并回退主题/字体/UI 设置）"
 fi
 
 # JetBrains Mono 字体（项目自带字体文件，直接复制到用户字体目录）
@@ -182,7 +182,7 @@ FONT_SRC="$(pwd)/JetBrainsMono-2.304/fonts/ttf"
 FONT_DIR="$HOME/.local/share/fonts"
 
 if [ "$JETBRAINS_MODE_ENABLED" -ne 1 ]; then
-    warn "JetBrains 模式已禁用，跳过字体安装"
+    warn "JetBrains 界面偏好已禁用，跳过字体安装"
 elif fc-list 2>/dev/null | grep -qi "JetBrains Mono"; then
     success "JetBrains Mono 字体已安装"
 else
@@ -244,7 +244,7 @@ if command -v code &>/dev/null; then
             warn "VS Code 安装失败"
         fi
     fi
-    if ! code --list-extensions 2>/dev/null | grep -qi "jetbrains.*darcula"; then
+    if [ "$JETBRAINS_MODE_ENABLED" -eq 1 ] && ! code --list-extensions 2>/dev/null | grep -qi "jetbrains.*darcula"; then
         if confirm "VS Code 未安装 JetBrains Darcula 主题，安装后可获得 PyCharm 风格外观" \
                     "code --install-extension ${DARCULA_EXT}"; then
             if code --install-extension "$DARCULA_EXT" 2>/dev/null; then
@@ -253,7 +253,7 @@ if command -v code &>/dev/null; then
                 warn "主题安装失败"
             fi
         fi
-    else
+    elif [ "$JETBRAINS_MODE_ENABLED" -eq 1 ]; then
         success "VS Code 已有 JetBrains Darcula 主题"
     fi
 else
@@ -271,7 +271,7 @@ if command -v cursor &>/dev/null; then
             warn "Cursor 安装失败"
         fi
     fi
-    if ! cursor --list-extensions 2>/dev/null | grep -qi "jetbrains.*darcula"; then
+    if [ "$JETBRAINS_MODE_ENABLED" -eq 1 ] && ! cursor --list-extensions 2>/dev/null | grep -qi "jetbrains.*darcula"; then
         if confirm "Cursor 未安装 JetBrains Darcula 主题，安装后可获得 PyCharm 风格外观" \
                     "cursor --install-extension ${DARCULA_EXT}"; then
             if cursor --install-extension "$DARCULA_EXT" 2>/dev/null; then
@@ -280,7 +280,7 @@ if command -v cursor &>/dev/null; then
                 warn "主题安装失败"
             fi
         fi
-    else
+    elif [ "$JETBRAINS_MODE_ENABLED" -eq 1 ]; then
         success "Cursor 已有 JetBrains Darcula 主题"
     fi
 else

@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import { spawn } from 'child_process';
 import { EXTENSION_ID } from './constants';
 
@@ -49,54 +48,46 @@ interface RunFileNode {
 type RunChildNode = RunDirectoryNode | RunFileNode;
 type LogsNode = TaskGroupNode | RunFolderNode | RunDirectoryNode | RunFileNode;
 
-// ──────────────────────── Per-project config ───────────────────
+// ──────────────────── Logs directory discovery ─────────────────
 
-const CONFIG_DIR = path.join(os.homedir(), '.config', 'trainning_extension');
+/** 在工作区各项目内查找名为 `log`/`logs` 目录的最大深度（直接子目录为第 1 层）。 */
+const LOGS_DIR_SEARCH_DEPTH = 2;
+/** 在每个 logs 目录内递归查找运行文件夹的最大深度。 */
+const RUN_SCAN_DEPTH = 4;
+/** 自动扫描间隔（毫秒）。 */
+const AUTO_SCAN_INTERVAL_MS = 5000;
 
-function ensureConfigDir(): void {
-    if (!fs.existsSync(CONFIG_DIR)) {
-        fs.mkdirSync(CONFIG_DIR, { recursive: true });
+/**
+ * 在所有工作区项目内自动发现 `log` / `logs` 目录，最多向下 LOGS_DIR_SEARCH_DEPTH 层。
+ * 不依赖任何用户设置，避免因 workspace key 不匹配而扫不到。
+ */
+function discoverLogsRoots(): string[] {
+    const roots: string[] = [];
+    for (const folder of vscode.workspace.workspaceFolders ?? []) {
+        findLogsDirs(folder.uri.fsPath, 1, roots);
     }
+    return [...new Set(roots)];
 }
 
-function getLogsMapPath(): string {
-    return path.join(CONFIG_DIR, 'logs_directories.json');
-}
+function findLogsDirs(dir: string, depth: number, out: string[]): void {
+    if (depth > LOGS_DIR_SEARCH_DEPTH) return;
 
-function readLogsMap(): Record<string, string> {
+    let entries: fs.Dirent[];
     try {
-        ensureConfigDir();
-        const p = getLogsMapPath();
-        if (!fs.existsSync(p)) return {};
-        return JSON.parse(fs.readFileSync(p, 'utf-8'));
+        entries = fs.readdirSync(dir, { withFileTypes: true });
     } catch {
-        return {};
+        return;
     }
-}
 
-function writeLogsMap(map: Record<string, string>): void {
-    try {
-        ensureConfigDir();
-        fs.writeFileSync(getLogsMapPath(), JSON.stringify(map, null, 2), 'utf-8');
-    } catch (err) {
-        console.error('Error writing logs map:', err);
+    for (const e of entries) {
+        if (!e.isDirectory()) continue;
+        const full = path.join(dir, e.name);
+        if (e.name.toLowerCase().includes('log')) {
+            out.push(full); // 名称包含 "log" 即视为 logs 根，不再深入其内部寻找别的
+            continue;
+        }
+        findLogsDirs(full, depth + 1, out);
     }
-}
-
-function getWorkspaceKey(): string {
-    const folders = vscode.workspace.workspaceFolders;
-    return folders?.[0]?.uri.fsPath ?? '__global__';
-}
-
-function getLogsDirectory(): string {
-    const map = readLogsMap();
-    return map[getWorkspaceKey()] ?? '';
-}
-
-function setLogsDirectoryPath(dir: string): void {
-    const map = readLogsMap();
-    map[getWorkspaceKey()] = dir;
-    writeLogsMap(map);
 }
 
 // ──────────────────────── File scanning ────────────────────────
@@ -240,14 +231,15 @@ function isRunFolder(dirName: string, entries: fs.Dirent[]): boolean {
 }
 
 /**
- * 递归扫描 directory，查找训练运行文件夹（含 .onnx 或 model_*.pt），
- * 按日期过滤，按任务路径分组。
+ * 在单个 logs 根目录内递归查找训练运行文件夹（含 .onnx 或 model_*.pt），
+ * 按任务路径分组（不做任何日期过滤）。
  *
  * 目录结构:
  *   logs / <任意层级任务路径> / <日期文件夹> / {*.onnx, model_*.pt, ...}
+ *
+ * 返回 groupKey（相对 logs 根的父路径）→ 运行文件夹列表。
  */
-function scanLogsTree(directory: string, days: number, maxDepth: number = 5): TaskGroupNode[] {
-    const cutoff = Date.now() - days * 86400_000;
+function scanLogsRoot(directory: string, maxDepth: number = RUN_SCAN_DEPTH): Map<string, RunFolderNode[]> {
     const groupMap = new Map<string, RunFolderNode[]>();
 
     function walk(dir: string, depth: number) {
@@ -264,7 +256,6 @@ function scanLogsTree(directory: string, days: number, maxDepth: number = 5): Ta
         if (isRunFolder(folderName, entries)) {
             // 当前 dir 是运行文件夹
             const parsedTime = parseTimeFromName(folderName);
-            if (parsedTime < cutoff) return; // 时间过滤
 
             // 分组 key = 相对于 logs 根目录的父路径
             const relToRoot = path.relative(directory, dir);
@@ -298,15 +289,76 @@ function scanLogsTree(directory: string, days: number, maxDepth: number = 5): Ta
     }
 
     walk(directory, 0);
+    return groupMap;
+}
+
+/**
+ * 扫描所有自动发现的 logs 根目录，合并为分组列表。
+ * 存在多个 logs 根时，分组标签前缀其所在项目名以避免冲突。
+ */
+function scanAllLogs(): TaskGroupNode[] {
+    const roots = discoverLogsRoots();
+    const rootNames = labelRoots(roots);
+    const merged = new Map<string, RunFolderNode[]>();
+
+    for (const root of roots) {
+        const rootName = rootNames.get(root)!;
+        for (const [key, runs] of scanLogsRoot(root)) {
+            // logs 文件夹名作为顶层分组，其下接任务路径
+            const label = key === '(root)' ? rootName : `${rootName}/${key}`;
+            const list = merged.get(label) ?? [];
+            list.push(...runs);
+            merged.set(label, list);
+        }
+    }
 
     const result: TaskGroupNode[] = [];
-    for (const [label, runs] of groupMap) {
+    for (const [label, runs] of merged) {
         // 每个分组内按文件名时间降序（最新在前）
         runs.sort((a, b) => b.parsedTime - a.parsedTime);
         result.push({ kind: 'taskGroup', label, children: runs });
     }
     result.sort((a, b) => a.label.localeCompare(b.label));
     return result;
+}
+
+/**
+ * 为每个 logs 根计算一个顶层显示名（其文件夹名）。
+ * 若多个根的文件夹名相同，则用「父目录名/文件夹名」消歧。
+ */
+function labelRoots(roots: string[]): Map<string, string> {
+    const counts = new Map<string, number>();
+    for (const r of roots) {
+        const b = path.basename(r);
+        counts.set(b, (counts.get(b) ?? 0) + 1);
+    }
+    const out = new Map<string, string>();
+    for (const r of roots) {
+        const b = path.basename(r);
+        out.set(r, counts.get(b)! > 1 ? `${path.basename(path.dirname(r))}/${b}` : b);
+    }
+    return out;
+}
+
+/** 为扫描结果生成一个签名，用于检测自动扫描时内容是否变化。 */
+function signatureOf(groups: TaskGroupNode[]): string {
+    const parts: string[] = [];
+    const visit = (n: LogsNode) => {
+        if (n.kind === 'runFile') {
+            parts.push(`f:${n.fullPath}:${n.size}`);
+        } else if (n.kind === 'runDirectory') {
+            parts.push(`d:${n.fullPath}`);
+            n.children.forEach(visit);
+        } else if (n.kind === 'runFolder') {
+            parts.push(`r:${n.folderPath}`);
+            n.children.forEach(visit);
+        } else {
+            parts.push(`g:${n.label}`);
+            n.children.forEach(visit);
+        }
+    };
+    groups.forEach(visit);
+    return parts.join('|');
 }
 
 // ──────────────────────── TreeDataProvider ──────────────────────
@@ -316,32 +368,38 @@ class LogsExplorerProvider implements vscode.TreeDataProvider<LogsNode> {
     readonly onDidChangeTreeData = this._onDidChange.event;
 
     private groups: TaskGroupNode[] = [];
-    private logsDir = '';
+    private signature = '';
+    private autoScanTimer?: ReturnType<typeof setInterval>;
 
     constructor() {
-        this.logsDir = getLogsDirectory();
         this.rescan();
+        // 每 AUTO_SCAN_INTERVAL_MS 自动扫描一次，仅在内容变化时刷新视图，
+        // 避免无谓地重置树的展开状态。
+        this.autoScanTimer = setInterval(() => {
+            const before = this.signature;
+            this.rescan();
+            if (this.signature !== before) {
+                this._onDidChange.fire();
+            }
+        }, AUTO_SCAN_INTERVAL_MS);
     }
 
     refresh(): void {
-        this.logsDir = getLogsDirectory();
         this.rescan();
         this._onDidChange.fire();
     }
 
     dispose(): void {
+        if (this.autoScanTimer) {
+            clearInterval(this.autoScanTimer);
+            this.autoScanTimer = undefined;
+        }
         this._onDidChange.dispose();
     }
 
     private rescan(): void {
-        if (!this.logsDir || !fs.existsSync(this.logsDir)) {
-            this.groups = [];
-            return;
-        }
-        const cfg = vscode.workspace.getConfiguration(EXTENSION_ID);
-        const days = cfg.get<number>('logsDaysFilter', 3);
-        const maxDepth = cfg.get<number>('logsScanDepth', 5);
-        this.groups = scanLogsTree(this.logsDir, days, maxDepth);
+        this.groups = scanAllLogs();
+        this.signature = signatureOf(this.groups);
     }
 
     // ──── TreeDataProvider API ────
@@ -475,21 +533,6 @@ function collectComparableFilePaths(nodes: LogsNode[]): string[] {
 
 // ──────────────────── Command handlers ─────────────────────────
 
-async function cmdSetLogsDirectory(provider: LogsExplorerProvider) {
-    const current = getLogsDirectory();
-    const picked = await vscode.window.showOpenDialog({
-        canSelectFolders: true,
-        canSelectFiles: false,
-        canSelectMany: false,
-        openLabel: '选择 Logs 目录',
-        defaultUri: current ? vscode.Uri.file(current) : undefined,
-    });
-    if (!picked?.[0]) return;
-    setLogsDirectoryPath(picked[0].fsPath);
-    provider.refresh();
-    vscode.window.showInformationMessage(`Logs 目录已设为: ${picked[0].fsPath}`);
-}
-
 /**
  * 复制选中文件到系统剪贴板（GNOME 格式），
  * 支持 Ctrl/Shift 多选，可在文件管理器中 Ctrl+V 粘贴。
@@ -548,16 +591,10 @@ async function cmdCopyRelativeLogPath(
     if (!nodes.length) nodes = [...treeView.selection];
     if (!nodes.length && _clickedNode) nodes = [_clickedNode];
 
-    const logsDir = getLogsDirectory();
-    if (!logsDir) {
-        vscode.window.showWarningMessage('请先设置 Logs 目录');
-        return;
-    }
-
     const paths = collectResourcePaths(nodes);
     if (!paths.length) return;
 
-    const relativePaths = paths.map(p => path.relative(logsDir, p) || '.');
+    const relativePaths = paths.map(p => vscode.workspace.asRelativePath(p, false) || '.');
     await vscode.env.clipboard.writeText(relativePaths.join('\n'));
     vscode.window.setStatusBarMessage(`已复制 ${relativePaths.length} 条相对路径`, 2000);
 }
@@ -623,22 +660,15 @@ export function registerLogsExplorerView(context: vscode.ExtensionContext): vsco
         showCollapseAll: true,
     });
 
-    // 设置变更时自动刷新
-    const configWatcher = vscode.workspace.onDidChangeConfiguration(e => {
-        if (e.affectsConfiguration(`${EXTENSION_ID}.logsDaysFilter`) ||
-            e.affectsConfiguration(`${EXTENSION_ID}.logsScanDepth`)) {
-            provider.refresh();
-        }
+    // 工作区文件夹变化时自动重新发现 logs 目录
+    const folderWatcher = vscode.workspace.onDidChangeWorkspaceFolders(() => {
+        provider.refresh();
     });
 
     const disposables: vscode.Disposable[] = [
         treeView,
-        configWatcher,
+        folderWatcher,
         new vscode.Disposable(() => provider.dispose()),
-
-        vscode.commands.registerCommand(`${EXTENSION_ID}.setLogsDirectory`, () =>
-            cmdSetLogsDirectory(provider),
-        ),
 
         vscode.commands.registerCommand(`${EXTENSION_ID}.refreshLogs`, () =>
             provider.refresh(),

@@ -1,11 +1,6 @@
 {
   "commands": [
     {
-      "command": "trainning_extension.setLogsDirectory",
-      "title": "Set Logs Directory",
-      "icon": "$(folder-opened)"
-    },
-    {
       "command": "trainning_extension.refreshLogs",
       "title": "Refresh Logs",
       "icon": "$(refresh)"
@@ -59,11 +54,6 @@
   },
   "menus": {
     "view/title": [
-      {
-        "command": "trainning_extension.setLogsDirectory",
-        "when": "view == trainning_extension_logs",
-        "group": "navigation@1"
-      },
       {
         "command": "trainning_extension.refreshLogs",
         "when": "view == trainning_extension_logs",
@@ -207,22 +197,5 @@
         "group": "navigation@5"
       }
     ]
-  },
-  "configuration": {
-    "properties": {
-      "trainning_extension.logsDaysFilter": {
-        "type": "number",
-        "default": 3,
-        "minimum": 1,
-        "markdownDescription": "Logs 视图：扫描最近多少天内的 `.onnx` 文件（按文件夹名中的日期判断，默认 3 天）。修改后自动刷新。"
-      },
-      "trainning_extension.logsScanDepth": {
-        "type": "number",
-        "default": 5,
-        "minimum": 1,
-        "maximum": 20,
-        "markdownDescription": "Logs 视图：递归扫描的最大目录深度（默认 5 层）。修改后自动刷新。"
-      }
-    }
   }
 }

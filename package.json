@@ -86,11 +86,6 @@
         "title": "Delete Model Files (整理 Logs / model_*.pt)"
       },
       {
-        "command": "trainning_extension.setLogsDirectory",
-        "title": "Set Logs Directory",
-        "icon": "$(folder-opened)"
-      },
-      {
         "command": "trainning_extension.refreshLogs",
         "title": "Refresh Logs",
         "icon": "$(refresh)"
@@ -228,11 +223,6 @@
           "command": "trainning_extension.refreshCommands",
           "when": "view == trainning_extension_commands",
           "group": "navigation"
-        },
-        {
-          "command": "trainning_extension.setLogsDirectory",
-          "when": "view == trainning_extension_logs",
-          "group": "navigation@1"
         },
         {
           "command": "trainning_extension.refreshLogs",
@@ -502,19 +492,6 @@
           "default": 4000,
           "minimum": 0,
           "markdownDescription": "步骤 1：上述子文件夹内所有 `model_*.pt` 的编号必须 **严格小于** 该值，才会被整夹删除；任一号 ≥ 该值则保留该文件夹。"
-        },
-        "trainning_extension.logsDaysFilter": {
-          "type": "number",
-          "default": 3,
-          "minimum": 1,
-          "markdownDescription": "Logs 视图：扫描最近多少天内的 `.onnx` 文件（按文件夹名中的日期判断，默认 3 天）。修改后自动刷新。"
-        },
-        "trainning_extension.logsScanDepth": {
-          "type": "number",
-          "default": 5,
-          "minimum": 1,
-          "maximum": 20,
-          "markdownDescription": "Logs 视图：递归扫描的最大目录深度（默认 5 层）。修改后自动刷新。"
         }
       }
     }
@@ -528,6 +505,7 @@
   "devDependencies": {
     "@types/node": "^18.0.0",
     "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^3.9.2",
     "typescript": "^5.0.0"
   },
   "dependencies": {

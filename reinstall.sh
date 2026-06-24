@@ -6,7 +6,7 @@ USER_CONFIG_DIR="$HOME/.config/trainning_extension"
 JETBRAINS_FLAG_FILE="$USER_CONFIG_DIR/jetbrains_mode_enabled"
 
 echo ""
-read -r -p "启用 JetBrains 操作方式设定（键位与界面偏好）? [Y/n] " jetbrains_choice
+read -r -p "启用 JetBrains 界面偏好（主题/字体/UI；快捷键始终保留）? [Y/n] " jetbrains_choice
 case "$jetbrains_choice" in
     [nN]) JETBRAINS_MODE_ENABLED=0 ;;
     *)    JETBRAINS_MODE_ENABLED=1 ;;
@@ -21,7 +21,7 @@ PUBLISHER=$(node -p "require('./package.json').publisher")
 VSIX="${NAME}-${VERSION}.vsix"
 OLD_VSIX="copy-with-ref-${VERSION}.vsix"
 if [ -f "$OLD_VSIX" ]; then rm -f "$OLD_VSIX"; fi
-vsce package --no-dependencies
+npx --no-install vsce package --no-dependencies
 
 if command -v code &>/dev/null; then
     code --uninstall-extension "${PUBLISHER}.copy-with-ref" 2>/dev/null || true

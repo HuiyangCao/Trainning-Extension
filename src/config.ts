@@ -88,3 +88,11 @@ export function applySettings(context: vscode.ExtensionContext, settings: Record
         });
     }
 }
+
+export function resetSettings(settings: Record<string, unknown>) {
+    const config = vscode.workspace.getConfiguration();
+
+    for (const key of Object.keys(settings)) {
+        config.update(key, undefined, vscode.ConfigurationTarget.Global);
+    }
+}

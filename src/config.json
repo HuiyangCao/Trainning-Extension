@@ -25,7 +25,8 @@
         "notebook.output.fontFamily": "JetBrains Mono, monospace",
         "markdown.preview.fontFamily": "JetBrains Mono, monospace",
         "gitlens.currentLine.fontFamily": "JetBrains Mono, monospace",
-        "gitlens.blame.fontFamily": "JetBrains Mono, monospace"
+        "gitlens.blame.fontFamily": "JetBrains Mono, monospace",
+        "remote.SSH.maxReconnectionAttempts": 2147483647
     },
     "keybindings": [
         { "key": "ctrl+alt+e", "command": "trainning_extension.revealFolderInExplorer" },
