@@ -23,16 +23,46 @@ OLD_VSIX="copy-with-ref-${VERSION}.vsix"
 if [ -f "$OLD_VSIX" ]; then rm -f "$OLD_VSIX"; fi
 npx --no-install vsce package --no-dependencies
 
-if command -v code &>/dev/null; then
-    code --uninstall-extension "${PUBLISHER}.copy-with-ref" 2>/dev/null || true
-    code --uninstall-extension "${PUBLISHER}.${NAME}" 2>/dev/null || true
-    code --install-extension "$VSIX"
+# Resolve an editor CLI: prefer PATH, then fall back to macOS .app bundle paths.
+resolve_editor_cli() {
+    local cmd="$1"; shift
+    if command -v "$cmd" &>/dev/null; then
+        command -v "$cmd"
+        return 0
+    fi
+    local candidate
+    for candidate in "$@"; do
+        if [ -x "$candidate" ]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+CODE_CLI=$(resolve_editor_cli code \
+    "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" \
+    "$HOME/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code") || true
+
+CURSOR_CLI=$(resolve_editor_cli cursor \
+    "/Applications/Cursor.app/Contents/Resources/app/bin/cursor" \
+    "$HOME/Applications/Cursor.app/Contents/Resources/app/bin/cursor") || true
+
+if [ -n "$CODE_CLI" ]; then
+    "$CODE_CLI" --uninstall-extension "${PUBLISHER}.copy-with-ref" 2>/dev/null || true
+    "$CODE_CLI" --uninstall-extension "${PUBLISHER}.${NAME}" 2>/dev/null || true
+    "$CODE_CLI" --install-extension "$VSIX"
 fi
 
-if command -v cursor &>/dev/null; then
-    cursor --uninstall-extension "${PUBLISHER}.copy-with-ref" 2>/dev/null || true
-    cursor --uninstall-extension "${PUBLISHER}.${NAME}" 2>/dev/null || true
-    cursor --install-extension "$VSIX" 2>/dev/null || true
+if [ -n "$CURSOR_CLI" ]; then
+    "$CURSOR_CLI" --uninstall-extension "${PUBLISHER}.copy-with-ref" 2>/dev/null || true
+    "$CURSOR_CLI" --uninstall-extension "${PUBLISHER}.${NAME}" 2>/dev/null || true
+    "$CURSOR_CLI" --install-extension "$VSIX" 2>/dev/null || true
+fi
+
+if [ -z "$CODE_CLI" ] && [ -z "$CURSOR_CLI" ]; then
+    echo "⚠️  未找到 code / cursor 命令，已打包但未安装：$VSIX"
+    echo "   手动安装：在编辑器中执行 'Extensions: Install from VSIX...' 选择该文件。"
 fi
 
 echo "Done. Reload window to take effect."
